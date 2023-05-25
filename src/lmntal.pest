@@ -1,0 +1,96 @@
+COMMENT    = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" | "//" ~ (!"\n" ~ ANY)* }
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
+
+AtomName       = @{
+    ('a'..'z' ~ ('a'..'z' | 'A'..'Z' | ASCII_DIGIT)*)
+  | ASCII_DIGIT+
+}
+NumberName     = @{
+    ASCII_DIGIT* ~ "."? ~ ASCII_DIGIT* ~ ("e" | "E") ~ ("+" | "-")? ~ ASCII_DIGIT+
+  | ASCII_DIGIT* ~ "." ~ ASCII_DIGIT+
+  | "0x" ~ ASCII_HEX_DIGIT+
+}
+PathedAtomName = @{
+    ASCII_ALPHA_LOWER ~ ASCII_ALPHANUMERIC* ~ "." ~ (ASCII_ALPHA_LOWER | ASCII_DIGIT) ~ ASCII_ALPHANUMERIC*
+}
+SymbolName     = @{
+    "'" ~ (!("'" | "\n" | "\r") ~ ANY)+ ~ "'"
+}
+
+RelativeOp = _{ FloatingRelativeOp | IntegerRelativeOp | unaryIS | unaryHE | groundIS | groundHE | anonymous }
+groundIS   =  { "=" }
+groundHE   =  { "\\=" }
+unaryIS    =  { "==" }
+unaryHE    =  { "\\==" }
+anonymous  =  { "?" | "::" | "!=" }
+
+IntegerRelativeOp = _{ integerLE | integerGE | integerLT | integerGT | integerIS | integerHE }
+integerLT         =  { "<" }
+integerGT         =  { ">" }
+integerLE         =  { "=<" }
+integerGE         =  { ">=" }
+// Isomorphic equality
+integerIS = { "=\\=" }
+// Heterogeneous equality
+integerHE = { "=:=" }
+
+FloatingRelativeOp = _{ floatLE | floatGE | floatLT | floatGT | floatIS | floatHE }
+floatLT            =  { "<." }
+floatGT            =  { ">." }
+floatLE            =  { "=<." }
+floatGE            =  { ">=." }
+// Isomorphic equality
+floatIS = { "=\\=." }
+// Heterogeneous equality
+floatHE = { "=:=." }
+
+HyperLinkOp = { "><" | ">*<" | ">+<" | ">>" | "<<" }
+
+Comma          = { "," }
+LeftParen      = { "(" }
+RightParen     = { ")" }
+LeftBracket    = { "[" }
+RightBracket   = { "]" }
+LeftBrace      = { "{" }
+RightBrace     = { "}" }
+RBraceSlash    = { "}/" }
+RBraceAt       = { "}@" }
+RBraceUnd      = { "}_" }
+RBraceUndSlash = { "}_/" }
+RBraceUndAt    = { "}_@" }
+RBraceAst      = { "}*" }
+Colon          = { ":" }
+Rule           = { ":-" }
+Backslash      = { "\\" }
+Period         = { "." }
+Guard          = { "|" }
+
+AsteriskDot = { "*." }
+SlashDot    = { "/." }
+PlusDot     = { "+." }
+MinusDot    = { "-." }
+
+Hat       = { "^" }
+Tilde     = { "~" }
+AASterisk = { "**" }
+ProcVar   = { "$" }
+RuleVar   = { "@" }
+
+Plus        = { "+" }
+Minus       = { "-" }
+Asterisk    = { "*" }
+Slash       = { "/" }
+Exclamation = { "!" }
+
+Mod     = { "mod" }
+LogAnd  = { "logand" }
+LogIor  = { "logior" }
+LogXor  = { "logxor" }
+LogNot  = { "lognot" }
+TypeDef = { "typedef" }
+Ash     = { "ash" }
+
+Negative    = { "\\+" }
+RuleNameSep = { "@@" }
+String      = { "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+Quoted      = { "[:" ~ (!":]" ~ ANY)* ~ ":]" }

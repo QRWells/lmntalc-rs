@@ -1,0 +1,19 @@
+[package]
+name = "lmntalc-rs"
+description = "A Rust implementation of LMNTAL compiler"
+license = "MIT"
+authors = ["Qirui Wang <qirui.wang@moegi.waseda.jp>"]
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "lmntalc"
+path = "src/main.rs"
+
+[lib]
+name = "liblmntalc"
+path = "src/lib.rs"
+
+[dependencies]
+pest = "2.6.0"
+pest_derive = "2.6.0"
