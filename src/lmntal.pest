@@ -1,21 +1,23 @@
 COMMENT    = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" | "//" ~ (!"\n" ~ ANY)* }
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 
-AtomName       = @{
-    ('a'..'z' ~ ('a'..'z' | 'A'..'Z' | ASCII_DIGIT)*)
+ATOM_NAME       = @{
+    (ASCII_ALPHA_LOWER ~ ASCII_ALPHANUMERIC*)
   | ASCII_DIGIT+
 }
-NumberName     = @{
+LinkName        = @{ (ASCII_ALPHA_UPPER | "_") ~ ASCII_ALPHANUMERIC* }
+NumberName      = @{
     ASCII_DIGIT* ~ "."? ~ ASCII_DIGIT* ~ ("e" | "E") ~ ("+" | "-")? ~ ASCII_DIGIT+
   | ASCII_DIGIT* ~ "." ~ ASCII_DIGIT+
   | "0x" ~ ASCII_HEX_DIGIT+
 }
-PathedAtomName = @{
+PathedAtomName  = @{
     ASCII_ALPHA_LOWER ~ ASCII_ALPHANUMERIC* ~ "." ~ (ASCII_ALPHA_LOWER | ASCII_DIGIT) ~ ASCII_ALPHANUMERIC*
 }
-SymbolName     = @{
+SymbolName      = @{
     "'" ~ (!("'" | "\n" | "\r") ~ ANY)+ ~ "'"
 }
+CharCodeLiteral =  { "#\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 
 RelativeOp = _{ FloatingRelativeOp | IntegerRelativeOp | unaryIS | unaryHE | groundIS | groundHE | anonymous }
 groundIS   =  { "=" }
@@ -46,51 +48,20 @@ floatHE = { "=:=." }
 
 HyperLinkOp = { "><" | ">*<" | ">+<" | ">>" | "<<" }
 
-Comma          = { "," }
-LeftParen      = { "(" }
-RightParen     = { ")" }
-LeftBracket    = { "[" }
-RightBracket   = { "]" }
-LeftBrace      = { "{" }
-RightBrace     = { "}" }
-RBraceSlash    = { "}/" }
-RBraceAt       = { "}@" }
-RBraceUnd      = { "}_" }
-RBraceUndSlash = { "}_/" }
-RBraceUndAt    = { "}_@" }
-RBraceAst      = { "}*" }
-Colon          = { ":" }
-Rule           = { ":-" }
-Backslash      = { "\\" }
-Period         = { "." }
-Guard          = { "|" }
+String = { "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+Quoted = { "[:" ~ (!":]" ~ ANY)* ~ ":]" }
 
-AsteriskDot = { "*." }
-SlashDot    = { "/." }
-PlusDot     = { "+." }
-MinusDot    = { "-." }
+Link      = { LinkName }
+HyperLink = { "!" ~ LinkName ~ (":" ~ FuncName)? }
+FuncName  = { Quoted | SymbolName | String | PathedAtomName }
+AtomName  = { ATOM_NAME | "mod" | "logand" | "logior" | "logxor" | "ash" }
+RuleName  = { AtomName | LinkName }
 
-Hat       = { "^" }
-Tilde     = { "~" }
-AASterisk = { "**" }
-ProcVar   = { "$" }
-RuleVar   = { "@" }
+UnitAtom = { NumberName | CharCodeLiteral | FuncName ~ ("(" ~ ProcessList ~ ")")? | List }
 
-Plus        = { "+" }
-Minus       = { "-" }
-Asterisk    = { "*" }
-Slash       = { "/" }
-Exclamation = { "!" }
+List = { "[]" }
 
-Mod     = { "mod" }
-LogAnd  = { "logand" }
-LogIor  = { "logior" }
-LogXor  = { "logxor" }
-LogNot  = { "lognot" }
-TypeDef = { "typedef" }
-Ash     = { "ash" }
+Atom = { UnitAtom }
 
-Negative    = { "\\+" }
-RuleNameSep = { "@@" }
-String      = { "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
-Quoted      = { "[:" ~ (!":]" ~ ANY)* ~ ":]" }
+ProcessList = { Process ~ ("," ~ Process)* }
+Process     = { Atom }
