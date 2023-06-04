@@ -1,67 +1,31 @@
 COMMENT    = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" | "//" ~ (!"\n" ~ ANY)* }
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 
-ATOM_NAME       = @{
+Program = { SOI ~ WorldProcessList ~ EOI }
+
+WorldProcessList = { ((Rule | DeclarationList) ~ ".")+ }
+
+DeclarationList = { Declaration ~ ("," ~ Declaration)* }
+
+Declaration = { UnitAtom }
+
+Rule = { (RuleName ~ "@@")? ~ DeclarationList ~ ":-" ~ DeclarationList }
+
+Atom = { AtomName ~ ("(" ~ DeclarationList ~ ")")? }
+
+Link = { LinkName }
+
+UnitAtom = { Atom | Membrane | Link }
+
+Membrane = { AtomName? ~ "{" ~ WorldProcessList ~ "}" }
+
+AtomName = @{
     (ASCII_ALPHA_LOWER ~ ASCII_ALPHANUMERIC*)
   | ASCII_DIGIT+
 }
-LinkName        = @{ (ASCII_ALPHA_UPPER | "_") ~ ASCII_ALPHANUMERIC* }
-NumberName      = @{
-    ASCII_DIGIT* ~ "."? ~ ASCII_DIGIT* ~ ("e" | "E") ~ ("+" | "-")? ~ ASCII_DIGIT+
-  | ASCII_DIGIT* ~ "." ~ ASCII_DIGIT+
-  | "0x" ~ ASCII_HEX_DIGIT+
+
+LinkName = @{
+    (ASCII_ALPHA_UPPER | "_") ~ ASCII_ALPHANUMERIC*
 }
-PathedAtomName  = @{
-    ASCII_ALPHA_LOWER ~ ASCII_ALPHANUMERIC* ~ "." ~ (ASCII_ALPHA_LOWER | ASCII_DIGIT) ~ ASCII_ALPHANUMERIC*
-}
-SymbolName      = @{
-    "'" ~ (!("'" | "\n" | "\r") ~ ANY)+ ~ "'"
-}
-CharCodeLiteral =  { "#\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 
-RelativeOp = _{ FloatingRelativeOp | IntegerRelativeOp | unaryIS | unaryHE | groundIS | groundHE | anonymous }
-groundIS   =  { "=" }
-groundHE   =  { "\\=" }
-unaryIS    =  { "==" }
-unaryHE    =  { "\\==" }
-anonymous  =  { "?" | "::" | "!=" }
-
-IntegerRelativeOp = _{ integerLE | integerGE | integerLT | integerGT | integerIS | integerHE }
-integerLT         =  { "<" }
-integerGT         =  { ">" }
-integerLE         =  { "=<" }
-integerGE         =  { ">=" }
-// Isomorphic equality
-integerIS = { "=\\=" }
-// Heterogeneous equality
-integerHE = { "=:=" }
-
-FloatingRelativeOp = _{ floatLE | floatGE | floatLT | floatGT | floatIS | floatHE }
-floatLT            =  { "<." }
-floatGT            =  { ">." }
-floatLE            =  { "=<." }
-floatGE            =  { ">=." }
-// Isomorphic equality
-floatIS = { "=\\=." }
-// Heterogeneous equality
-floatHE = { "=:=." }
-
-HyperLinkOp = { "><" | ">*<" | ">+<" | ">>" | "<<" }
-
-String = { "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
-Quoted = { "[:" ~ (!":]" ~ ANY)* ~ ":]" }
-
-Link      = { LinkName }
-HyperLink = { "!" ~ LinkName ~ (":" ~ FuncName)? }
-FuncName  = { Quoted | SymbolName | String | PathedAtomName }
-AtomName  = { ATOM_NAME | "mod" | "logand" | "logior" | "logxor" | "ash" }
-RuleName  = { AtomName | LinkName }
-
-UnitAtom = { NumberName | CharCodeLiteral | FuncName ~ ("(" ~ ProcessList ~ ")")? | List }
-
-List = { "[]" }
-
-Atom = { UnitAtom }
-
-ProcessList = { Process ~ ("," ~ Process)* }
-Process     = { Atom }
+RuleName = @{ AtomName | LinkName }
