@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use lazy_static::lazy_static;
 use pest::{error::Error, Parser};
 
-use crate::data::{self, Atom, Link, Program};
+use crate::data::{self, Atom, Link, Memebrane, Program};
 
 #[derive(Parser)]
 #[grammar = "lmntal.pest"]
@@ -18,7 +18,7 @@ lazy_static! {
     static ref ATOMS: HashMap<usize, Atom> = HashMap::new();
     static ref LINKS: HashMap<usize, Link> = HashMap::new();
     static ref RULES: HashMap<usize, data::Rule> = HashMap::new();
-    static ref MEMS: HashMap<usize, data::Memebrane> = HashMap::new();
+    static ref MEMS: HashMap<usize, Memebrane> = HashMap::new();
 }
 
 pub fn parse_lmntal(file: &str) -> Result<Program, Error<Rule>> {

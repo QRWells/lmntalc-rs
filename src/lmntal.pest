@@ -20,12 +20,12 @@ UnitAtom = { Atom | Membrane | Link }
 Membrane = { AtomName? ~ "{" ~ WorldProcessList ~ "}" }
 
 AtomName = @{
-    (ASCII_ALPHA_LOWER ~ ASCII_ALPHANUMERIC*)
+    (ASCII_ALPHA_LOWER ~ (ASCII_ALPHANUMERIC | "_")*)
   | ASCII_DIGIT+
 }
 
 LinkName = @{
-    (ASCII_ALPHA_UPPER | "_") ~ ASCII_ALPHANUMERIC*
+    (ASCII_ALPHA_UPPER | "_") ~ (ASCII_ALPHANUMERIC | "_")*
 }
 
 RuleName = @{ AtomName | LinkName }
