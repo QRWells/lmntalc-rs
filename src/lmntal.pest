@@ -9,7 +9,14 @@ DeclarationList = { Declaration ~ ("," ~ Declaration)* }
 
 Declaration = { UnitAtom }
 
-Rule = { (RuleName ~ "@@")? ~ DeclarationList ~ ":-" ~ DeclarationList? }
+Rule = { (RuleName ~ ":")? ~ DeclarationList ~ ("[" ~ Guard ~ "]")? ~ "->" ~ DeclarationList? }
+
+LogicalOperator    = { "&&" | "||" }
+RelationalOperator = { "==" | "!=" | "<=" | "<" | ">=" | ">" }
+ArithmeticOperator = { "+" | "-" | "*" | "/" | "%" }
+RelationalOperand  = { UnitAtom ~ (ArithmeticOperator ~ UnitAtom)? }
+LogicalOperand     = { RelationalOperand ~ (RelationalOperator ~ RelationalOperand)? | "(" ~ Guard ~ ")" }
+Guard              = { LogicalOperand ~ (LogicalOperator ~ LogicalOperand)* }
 
 Atom = { AtomName ~ ("(" ~ DeclarationList ~ ")")? }
 
@@ -29,3 +36,6 @@ LinkName = @{
 }
 
 RuleName = @{ AtomName | LinkName }
+
+String = @{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+Integer = @{ ASCII_DIGIT+ }

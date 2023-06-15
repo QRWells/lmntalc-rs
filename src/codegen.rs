@@ -10,6 +10,9 @@ pub struct ILGenerator {
 }
 
 impl ILGenerator {
+    pub fn new() -> ILGenerator {
+        ILGenerator { il: Vec::new() }
+    }
     pub fn emit(&mut self, il: IL) {
         self.il.push(il);
     }

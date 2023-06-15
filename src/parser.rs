@@ -21,13 +21,17 @@ pub static mut MEMS: OnceCell<HashMap<MembraneId, Membrane>> = OnceCell::new();
 pub fn parse_lmntal(file: &str) -> Result<Symbol, Box<pest::error::Error<Rule>>> {
     let pairs = LMNParser::parse(Rule::Program, file)?;
     let mut init_process = Vec::new();
+    let id = unsafe { MEM_ID };
     for pair in pairs {
         match pair.as_rule() {
             Rule::Program => {
                 for pair in pair.into_inner() {
                     match pair.as_rule() {
                         Rule::WorldProcessList => {
-                            init_process.append(&mut parse_world_process_list(pair));
+                            init_process.append(&mut parse_world_process_list(
+                                pair,
+                                Some(Symbol::Membrane(id)),
+                            ));
                         }
                         Rule::EOI => {}
                         _ => {
@@ -41,7 +45,6 @@ pub fn parse_lmntal(file: &str) -> Result<Symbol, Box<pest::error::Error<Rule>>>
             }
         }
     }
-    let id = unsafe { MEM_ID };
     unsafe {
         MEM_ID += 1;
         MEMS.get_or_init(HashMap::new);
@@ -56,7 +59,10 @@ pub fn parse_lmntal(file: &str) -> Result<Symbol, Box<pest::error::Error<Rule>>>
     Ok(Symbol::Membrane(id))
 }
 
-fn parse_world_process_list(pair: pest::iterators::Pair<Rule>) -> Vec<Symbol> {
+fn parse_world_process_list(
+    pair: pest::iterators::Pair<Rule>,
+    from: Option<Symbol>,
+) -> Vec<Symbol> {
     let mut list: Vec<Symbol> = Vec::new();
     for pair in pair.into_inner() {
         match pair.as_rule() {
@@ -64,7 +70,7 @@ fn parse_world_process_list(pair: pest::iterators::Pair<Rule>) -> Vec<Symbol> {
                 list.push(parse_rule(pair));
             }
             Rule::DeclarationList => {
-                list.append(&mut parse_declaration_list(pair));
+                list.append(&mut parse_declaration_list(pair, from));
             }
             Rule::EOI => {}
             _ => {
@@ -75,12 +81,12 @@ fn parse_world_process_list(pair: pest::iterators::Pair<Rule>) -> Vec<Symbol> {
     list
 }
 
-fn parse_declaration_list(pair: pest::iterators::Pair<Rule>) -> Vec<Symbol> {
+fn parse_declaration_list(pair: pest::iterators::Pair<Rule>, from: Option<Symbol>) -> Vec<Symbol> {
     let mut symbols = Vec::new();
     for pair in pair.into_inner() {
         match pair.as_rule() {
             Rule::Declaration => {
-                symbols.push(parse_declaration(pair));
+                symbols.push(parse_declaration(pair, from));
             }
             _ => {
                 unreachable!("Unexpected rule: {:?}", pair.as_rule());
@@ -90,11 +96,11 @@ fn parse_declaration_list(pair: pest::iterators::Pair<Rule>) -> Vec<Symbol> {
     symbols
 }
 
-fn parse_declaration(pair: pest::iterators::Pair<Rule>) -> Symbol {
+fn parse_declaration(pair: pest::iterators::Pair<Rule>, from: Option<Symbol>) -> Symbol {
     for pair in pair.into_inner() {
         match pair.as_rule() {
             Rule::UnitAtom => {
-                return parse_unit_atom(pair);
+                return parse_unit_atom(pair, from);
             }
             _ => {
                 unreachable!("Unexpected rule: {:?}", pair.as_rule());
@@ -104,17 +110,17 @@ fn parse_declaration(pair: pest::iterators::Pair<Rule>) -> Symbol {
     unreachable!();
 }
 
-fn parse_unit_atom(pair: pest::iterators::Pair<Rule>) -> Symbol {
+fn parse_unit_atom(pair: pest::iterators::Pair<Rule>, from: Option<Symbol>) -> Symbol {
     for pair in pair.into_inner() {
         match pair.as_rule() {
             Rule::Atom => {
-                return parse_atom(pair);
+                return parse_atom(pair, from);
             }
             Rule::Membrane => {
-                return parse_membrane(pair);
+                return parse_membrane(pair, from);
             }
             Rule::Link => {
-                return parse_link(pair);
+                return parse_link(pair, from);
             }
             _ => {
                 unreachable!();
@@ -124,7 +130,7 @@ fn parse_unit_atom(pair: pest::iterators::Pair<Rule>) -> Symbol {
     unreachable!();
 }
 
-fn parse_link(pair: pest::iterators::Pair<Rule>) -> Symbol {
+fn parse_link(pair: pest::iterators::Pair<Rule>, from: Option<Symbol>) -> Symbol {
     let mut name = "".to_string();
     for pair in pair.into_inner() {
         match pair.as_rule() {
@@ -138,38 +144,46 @@ fn parse_link(pair: pest::iterators::Pair<Rule>) -> Symbol {
     }
 
     unsafe {
-        for ele in LINKS.get_or_init(HashMap::new) {
-            if ele.1.name.eq(&name) {
-                return Symbol::Link(*ele.0);
+        LINKS.get_or_init(HashMap::new);
+        // find if there is a link with the same name
+        for (k, v) in LINKS.get_mut().unwrap().iter_mut() {
+            if v.name == name {
+                v.link2 = from;
+                return Symbol::Link(*k);
             }
         }
         let id = LINK_ID;
         LINK_ID += 1;
         let link = Link {
-            name
+            name,
+            link1: from,
+            link2: None,
         };
         LINKS.get_mut().unwrap().insert(id, link);
         Symbol::Link(id)
     }
 }
 
-fn parse_membrane(pair: pest::iterators::Pair<Rule>) -> Symbol {
+fn parse_membrane(pair: pest::iterators::Pair<Rule>, from: Option<Symbol>) -> Symbol {
     let mut name = "".to_string();
     let mut process: Vec<Symbol> = Vec::new();
+    let id = unsafe { MEM_ID };
     for pair in pair.into_inner() {
         match pair.as_rule() {
             Rule::AtomName => {
                 name = pair.as_str().to_string();
             }
             Rule::WorldProcessList => {
-                process.append(&mut parse_world_process_list(pair));
+                process.append(&mut parse_world_process_list(
+                    pair,
+                    Some(Symbol::Membrane(id)),
+                ));
             }
             _ => {
                 unreachable!("Unexpected rule: {:?}", pair.as_rule());
             }
         }
     }
-    let id = unsafe { MEM_ID };
     let membrane = Membrane { name, process };
     unsafe {
         MEM_ID += 1;
@@ -179,16 +193,17 @@ fn parse_membrane(pair: pest::iterators::Pair<Rule>) -> Symbol {
     Symbol::Membrane(id)
 }
 
-fn parse_atom(pair: pest::iterators::Pair<Rule>) -> Symbol {
+fn parse_atom(pair: pest::iterators::Pair<Rule>, from: Option<Symbol>) -> Symbol {
     let mut name: String = "".to_string();
     let mut process: Vec<Symbol> = Vec::new();
+    let id = unsafe { ATOM_ID };
     for pair in pair.into_inner() {
         match pair.as_rule() {
             Rule::AtomName => {
                 name = pair.as_str().to_string();
             }
             Rule::DeclarationList => {
-                process.append(&mut parse_declaration_list(pair));
+                process.append(&mut parse_declaration_list(pair, Some(Symbol::Atom(id))));
             }
             _ => {
                 unreachable!("Unexpected rule: {:?}", pair.as_rule());
@@ -196,7 +211,6 @@ fn parse_atom(pair: pest::iterators::Pair<Rule>) -> Symbol {
         }
     }
 
-    let id = unsafe { ATOM_ID };
     let atom = if process.is_empty() {
         Atom {
             name,
@@ -220,7 +234,9 @@ fn parse_rule(pair: pest::iterators::Pair<Rule>) -> Symbol {
     let mut stage = 0;
     let mut name = "".to_string();
     let mut pattern: Vec<Symbol> = Vec::new();
+    let mut guard: Option<Vec<Symbol>> = None;
     let mut body: Vec<Symbol> = Vec::new();
+    let id = unsafe { RULE_ID };
     for pair in pair.into_inner() {
         match pair.as_rule() {
             Rule::RuleName => {
@@ -228,27 +244,29 @@ fn parse_rule(pair: pest::iterators::Pair<Rule>) -> Symbol {
             }
             Rule::DeclarationList => match stage {
                 0 => {
-                    pattern.append(&mut parse_declaration_list(pair));
+                    pattern.append(&mut parse_declaration_list(pair, Some(Symbol::Rule(id))));
                     stage += 1;
                 }
                 1 => {
-                    body.append(&mut parse_declaration_list(pair));
+                    body.append(&mut parse_declaration_list(pair, Some(Symbol::Rule(id))));
                     stage += 1;
                 }
                 _ => {
                     unreachable!("Unexpected stage: {}", stage)
                 }
             },
+            Rule::Guard => {
+                guard = Some(parse_declaration_list(pair, Some(Symbol::Rule(id))));
+            }
             _ => {
                 unreachable!("Unexpected rule: {:?}", pair.as_rule())
             }
         }
     }
-    let id = unsafe { RULE_ID };
     let rule = data::Rule {
         name,
         pattern,
-        guard: None,
+        guard,
         body,
     };
     unsafe {

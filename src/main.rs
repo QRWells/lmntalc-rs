@@ -1,12 +1,14 @@
 use liblmntalc::data::Symbol;
-use liblmntalc::parser;
+use liblmntalc::{codegen, parser};
 
 pub mod rewriter;
 
 fn main() {
-    match liblmntalc::parser::parse_lmntal("a(X), b(X). xx @@ a,b :- c, d.") {
+    match liblmntalc::parser::parse_lmntal("a(X), b(X). xx : a,b -> c, d.") {
         Ok(s) => {
             print_result(&s, 0);
+            let mut gen = codegen::ILGenerator::new();
+            s.gen_il(&mut gen);
         }
         Err(e) => println!("{}", e),
     }

@@ -1,6 +1,0 @@
-Program        = { SOI ~ DeclarationSet ~ Ruleset ~ EOI }
-DeclarationSet = { Declaration* }
-Ruleset        = { Rule* }
-
-Declaration = { ADLAM }
-Rule        = { ADLAM }

@@ -1,11 +1,11 @@
-use crate::codegen::ILGenerator;
+use crate::{codegen::ILGenerator, il::IL};
 
 pub type AtomId = usize;
 pub type LinkId = usize;
 pub type RuleId = usize;
 pub type MembraneId = usize;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Symbol {
     Atom(AtomId),
     Link(LinkId),
@@ -23,7 +23,9 @@ impl Symbol {
         }
     }
 
-    fn gen_atom(&self, generator: &mut ILGenerator) {}
+    fn gen_atom(&self, generator: &mut ILGenerator) {
+        generator.emit(IL::NewAtom(0))
+    }
 
     fn gen_rule(&self, generator: &mut ILGenerator) {}
 
@@ -49,6 +51,8 @@ pub struct Atom {
 #[derive(Debug)]
 pub struct Link {
     pub name: String,
+    pub link1: Option<Symbol>,
+    pub link2: Option<Symbol>,
 }
 
 #[derive(Debug)]
