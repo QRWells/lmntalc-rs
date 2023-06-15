@@ -1,33 +1,58 @@
-use std::collections::LinkedList;
+use crate::codegen::ILGenerator;
 
-pub enum SymbolType {
-    Atom,
-    Link,
-    Rule,
-    Membrane,
-    Process,
+pub type AtomId = usize;
+pub type LinkId = usize;
+pub type RuleId = usize;
+pub type MembraneId = usize;
+
+#[derive(Debug)]
+pub enum Symbol {
+    Atom(AtomId),
+    Link(LinkId),
+    Rule(RuleId),
+    Membrane(MembraneId),
 }
 
-pub struct SymbolId {
-    symbol_type: SymbolType,
-    id: usize,
+impl Symbol {
+    pub fn gen_il(&self, generator: &mut ILGenerator) {
+        match self {
+            Symbol::Atom(_) => self.gen_atom(generator),
+            Symbol::Link(_) => self.gen_link(generator),
+            Symbol::Rule(_) => self.gen_rule(generator),
+            Symbol::Membrane(_) => self.gen_mem(generator),
+        }
+    }
+
+    fn gen_atom(&self, generator: &mut ILGenerator) {}
+
+    fn gen_rule(&self, generator: &mut ILGenerator) {}
+
+    fn gen_link(&self, generator: &mut ILGenerator) {}
+
+    fn gen_mem(&self, generator: &mut ILGenerator) {}
 }
 
-pub struct  Process {
-    name: String,
-    symbol: SymbolId,
-}
-
-pub struct Program {}
+#[derive(Debug)]
 pub struct Rule {
-    name: String,
-    head: LinkedList<Atom>,
+    pub name: String,
+    pub pattern: Vec<Symbol>,
+    pub guard: Option<Vec<Symbol>>,
+    pub body: Vec<Symbol>,
 }
+
+#[derive(Debug)]
 pub struct Atom {
-    name: String,
-    process: Option<LinkedList<SymbolId>>,
+    pub name: String,
+    pub process: Option<Vec<Symbol>>,
 }
+
+#[derive(Debug)]
 pub struct Link {
-    name: String,
+    pub name: String,
 }
-pub struct Memebrane {}
+
+#[derive(Debug)]
+pub struct Membrane {
+    pub name: String,
+    pub process: Vec<Symbol>,
+}

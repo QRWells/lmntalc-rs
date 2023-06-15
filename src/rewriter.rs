@@ -1,6 +1,7 @@
-use liblmntalc::data::Process;
+use liblmntalc::data::Symbol;
 
-pub fn rewrite_process(process: &Process) {}
+
+pub fn rewrite_process(process: &Vec<Symbol>) {}
 
 pub fn rewrite_atom() {}
 

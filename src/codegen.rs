@@ -5,7 +5,7 @@ pub enum Target {
     Binary,
 }
 
-struct ILGenerator {
+pub struct ILGenerator {
     il: Vec<IL>,
 }
 
@@ -16,5 +16,9 @@ impl ILGenerator {
 
     pub fn write_to(&self, path: &str, target: Target) {
         todo!("ILGenerator::write_to")
+    }
+
+    fn binary_header(&self) -> Vec<u8> {
+        todo!("ILGenerator::binary_header")
     }
 }

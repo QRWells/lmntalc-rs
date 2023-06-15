@@ -9,7 +9,7 @@ DeclarationList = { Declaration ~ ("," ~ Declaration)* }
 
 Declaration = { UnitAtom }
 
-Rule = { (RuleName ~ "@@")? ~ DeclarationList ~ ":-" ~ DeclarationList }
+Rule = { (RuleName ~ "@@")? ~ DeclarationList ~ ":-" ~ DeclarationList? }
 
 Atom = { AtomName ~ ("(" ~ DeclarationList ~ ")")? }
 
