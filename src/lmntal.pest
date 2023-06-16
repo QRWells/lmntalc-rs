@@ -3,7 +3,7 @@ WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 
 Program = { SOI ~ WorldProcessList ~ EOI }
 
-WorldProcessList = { ((Rule | DeclarationList) ~ ".")+ }
+WorldProcessList = { ((Rule | DeclarationList) ~ ";")+ }
 
 DeclarationList = { Declaration ~ ("," ~ Declaration)* }
 
@@ -22,7 +22,7 @@ Atom = { AtomName ~ ("(" ~ DeclarationList ~ ")")? }
 
 Link = { LinkName }
 
-UnitAtom = { Atom | Membrane | Link }
+UnitAtom = { Membrane | Atom | Link }
 
 Membrane = { AtomName? ~ "{" ~ WorldProcessList ~ "}" }
 

@@ -4,7 +4,7 @@ use crate::codegen::Target;
 pub enum IL {
     Spec(usize /* formals */, usize /* locals */),
     Commit(&'static str, usize /* line number */),
-    NewAtom(usize /* atom id */),
+    NewAtom(usize /* atom id */, usize /* membrane id */, &'static str),
     RemoveAtom(usize /* atom id */),
     FreeAtom(usize /* atom id */),
 

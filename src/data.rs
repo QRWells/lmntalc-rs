@@ -24,7 +24,13 @@ impl Symbol {
     }
 
     fn gen_atom(&self, generator: &mut ILGenerator) {
-        generator.emit(IL::NewAtom(0))
+        let id = match self {
+            Symbol::Atom(id) => *id,
+            _ => unreachable!(),
+        };
+        let atom = unsafe { crate::parser::ATOMS.get().unwrap().get(&id).unwrap() };
+        // TODO: functor number
+        generator.emit(IL::NewAtom(id, atom.membrane, &atom.name))
     }
 
     fn gen_rule(&self, generator: &mut ILGenerator) {}
@@ -36,6 +42,7 @@ impl Symbol {
 
 #[derive(Debug)]
 pub struct Rule {
+    pub membrane: MembraneId,
     pub name: String,
     pub pattern: Vec<Symbol>,
     pub guard: Option<Vec<Symbol>>,
@@ -44,6 +51,7 @@ pub struct Rule {
 
 #[derive(Debug)]
 pub struct Atom {
+    pub membrane: MembraneId,
     pub name: String,
     pub process: Option<Vec<Symbol>>,
 }
@@ -57,6 +65,7 @@ pub struct Link {
 
 #[derive(Debug)]
 pub struct Membrane {
+    pub membrane: MembraneId,
     pub name: String,
     pub process: Vec<Symbol>,
 }
