@@ -1,12 +1,17 @@
+pub mod data;
+pub mod rule_parser;
+
 use once_cell::sync::OnceCell;
 use pest::Parser;
 use std::collections::HashMap;
 
-use crate::data::{self, *};
+use self::{data::*, rule_parser::parse_rule};
 
 #[derive(Parser)]
 #[grammar = "lmntal.pest"]
-struct LMNParser;
+pub(crate) struct LMNParser;
+
+pub type ParserRule = Rule;
 
 static mut ATOM_ID: AtomId = 0;
 static mut LINK_ID: LinkId = 0;
@@ -55,6 +60,7 @@ pub fn parse_lmntal(file: &str) -> Result<Symbol, Box<pest::error::Error<Rule>>>
                 membrane: MembraneId::MAX,
                 name: "init".to_string(),
                 process: init_process,
+                rule_set: vec![],
             },
         );
     }
@@ -187,6 +193,7 @@ fn parse_membrane(
     let mut name = "".to_string();
     let mut process: Vec<Symbol> = Vec::new();
     let id = unsafe { MEM_ID };
+    unsafe { MEM_ID += 1 };
     for pair in pair.into_inner() {
         match pair.as_rule() {
             Rule::AtomName => {
@@ -208,9 +215,9 @@ fn parse_membrane(
         membrane,
         name,
         process,
+        rule_set: vec![],
     };
     unsafe {
-        MEM_ID += 1;
         MEMS.get_or_init(HashMap::new);
         MEMS.get_mut().unwrap().insert(id, membrane);
     }
@@ -262,78 +269,4 @@ fn parse_atom(
         ATOMS.get_mut().unwrap().insert(id, atom);
     }
     Symbol::Atom(id)
-}
-
-fn parse_rule(pair: pest::iterators::Pair<Rule>, membrane: MembraneId) -> Symbol {
-    let mut stage = 0;
-    let mut name = "".to_string();
-    let mut pattern: Vec<Symbol> = Vec::new();
-    let mut guard: Option<Vec<Symbol>> = None;
-    let mut body: Vec<Symbol> = Vec::new();
-    let id = unsafe { RULE_ID };
-    for pair in pair.into_inner() {
-        match pair.as_rule() {
-            Rule::RuleName => {
-                name = pair.as_str().to_string();
-            }
-            Rule::DeclarationList => match stage {
-                0 => {
-                    pattern.append(&mut parse_declaration_list(
-                        pair,
-                        Some(Symbol::Rule(id)),
-                        membrane,
-                    ));
-                    stage += 1;
-                }
-                1 => {
-                    body.append(&mut parse_declaration_list(
-                        pair,
-                        Some(Symbol::Rule(id)),
-                        membrane,
-                    ));
-                    stage += 1;
-                }
-                _ => {
-                    unreachable!("Unexpected stage: {}", stage)
-                }
-            },
-            Rule::Guard => {
-                guard = Some(parse_guard(pair));
-            }
-            _ => {
-                unreachable!("Unexpected rule: {:?}", pair.as_rule())
-            }
-        }
-    }
-    let rule = data::Rule {
-        membrane,
-        name,
-        pattern,
-        guard,
-        body,
-    };
-    unsafe {
-        RULE_ID += 1;
-        RULES.get_or_init(HashMap::new);
-        RULES.get_mut().unwrap().insert(id, rule);
-    }
-    Symbol::Rule(id)
-}
-
-fn parse_guard(pair: pest::iterators::Pair<Rule>) -> Vec<Symbol> {
-    let mut guard: Vec<Symbol> = Vec::new();
-    for pair in pair.into_inner() {
-        match pair.as_rule() {
-            Rule::LogicalOperand => {
-                guard.append(&mut parse_declaration_list(pair, None, 0));
-            }
-            Rule::LogicalOperator =>{
-                
-            }
-            _ => {
-                unreachable!("Unexpected rule: {:?}", pair.as_rule())
-            }
-        }
-    }
-    guard
 }

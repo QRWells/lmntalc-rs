@@ -1,4 +1,7 @@
-use crate::il::IL;
+use self::il::IL;
+
+pub mod il;
+mod rule_gen;
 
 pub enum Target {
     Text,
