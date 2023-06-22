@@ -3,22 +3,11 @@ WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 
 Program = { SOI ~ WorldProcessList ~ EOI }
 
-WorldProcessList = { ((Rule | DeclarationList) ~ ";")+ }
+WorldProcessList = { (Rule | DeclarationList) ~ (";" ~ (Rule | DeclarationList))* ~ ";"? }
 
 DeclarationList = { Declaration ~ ("," ~ Declaration)* }
 
 Declaration = { UnitAtom }
-
-Rule    = { (RuleName ~ ":")? ~ Pattern ~ ("[" ~ Guard ~ "]")? ~ "->" ~ Body }
-Body    = { DeclarationList? }
-Pattern = { DeclarationList }
-
-LogicalOperator    = { "&&" | "||" }
-RelationalOperator = { "==" | "!=" | "<=" | "<" | ">=" | ">" }
-ArithmeticOperator = { "+" | "-" | "*" | "/" | "%" }
-RelationalOperand  = { UnitAtom ~ (ArithmeticOperator ~ UnitAtom)* }
-LogicalOperand     = { RelationalOperand ~ (RelationalOperator ~ RelationalOperand)? | "(" ~ Guard ~ ")" }
-Guard              = { LogicalOperand ~ (LogicalOperator ~ LogicalOperand)* }
 
 Atom = { AtomName ~ ("(" ~ DeclarationList ~ ")")? }
 
@@ -30,11 +19,51 @@ Membrane = { AtomName? ~ "{" ~ WorldProcessList ~ "}" }
 
 AtomName = @{
     (ASCII_ALPHA_LOWER ~ (ASCII_ALPHANUMERIC | "_")*)
-  | ASCII_DIGIT+
+  | Float
+  | Int
 }
 
 LinkName = @{
     (ASCII_ALPHA_UPPER | "_") ~ (ASCII_ALPHANUMERIC | "_")*
 }
 
-RuleName = @{ AtomName | LinkName }
+RuleName = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+Rule     =  { (RuleName ~ ":")? ~ Pattern ~ ("[" ~ Guard ~ "]")? ~ "->" ~ Body }
+Body     =  { DeclarationList? }
+Pattern  =  { DeclarationList }
+
+GuardAtom  = _{ GuardUint | "(" ~ Guard ~ ")" }
+MulDivExpr =  { GuardAtom ~ ((MUL | DIV | MOD) ~ GuardAtom)* }
+AddSubExpr =  { MulDivExpr ~ ((ADD | SUB) ~ MulDivExpr)* }
+RelExpr    =  { AddSubExpr ~ ((LE | LT | GE | GT | EQ | NE) ~ AddSubExpr) }
+AndExpr    =  { (RelExpr | GuardFuncConstraint) ~ (AND ~ (RelExpr | GuardFuncConstraint))* }
+OrExpr     =  { AndExpr ~ (OR ~ AndExpr)* }
+Guard      =  { OrExpr }
+
+Int   = @{ ASCII_DIGIT+ | "0x" ~ ASCII_HEX_DIGIT+ }
+Float = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* }
+
+ADD = { "+" }
+SUB = { "-" }
+MUL = { "*" }
+DIV = { "/" }
+MOD = { "%" }
+LE  = { "<=" }
+LT  = { "<" }
+GE  = { ">=" }
+GT  = { ">" }
+EQ  = { "==" }
+NE  = { "!=" }
+AND = { "&&" }
+OR  = { "||" }
+
+GuardFunctorList    =  { GuardFunctor ~ ("," ~ GuardFunctor)* }
+GuardFunctor        = @{ ASCII_ALPHA_UPPER ~ (ASCII_ALPHANUMERIC | "_")* }
+GuardUint           = _{ GuardFunctor | Float | Int }
+GuardFuncConstraint =  { GuardFunc ~ "(" ~ GuardFunctorList ~ ")" }
+GuardFunc           = _{ GuardInt | GuardFloat | GuardGround | GuardUniq | GuardUnary }
+GuardUnary          =  { "unary" }
+GuardInt            =  { "int" }
+GuardFloat          =  { "float" }
+GuardGround         =  { "ground" }
+GuardUniq           =  { "uniq" }

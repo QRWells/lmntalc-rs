@@ -3,7 +3,7 @@ pub type LinkId = usize;
 pub type RuleId = usize;
 pub type MembraneId = usize;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum Symbol {
     Atom(AtomId),
     Link(LinkId),
@@ -11,73 +11,12 @@ pub enum Symbol {
     Membrane(MembraneId),
 }
 
-// Data structures for rules.
-
-#[derive(Debug)]
-pub struct PatternAtom {
-    pub name: String,
-    pub functors: usize,
-}
-
-#[derive(Debug)]
-pub struct PatternMembrane {
-    pub name: String,
-    pub atoms: Vec<PatternAtom>,
-    pub mems: Vec<PatternMembrane>,
-}
-
-#[derive(Debug)]
-pub struct Pattern {
-    pub atoms: Vec<PatternAtom>,
-    pub mems: Vec<PatternMembrane>,
-}
-
-impl Pattern {
-    pub fn new() -> Self {
-        Pattern {
-            atoms: Vec::new(),
-            mems: Vec::new(),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct Rule {
-    /// The membrane this rule belongs to.
-    pub membrane: MembraneId,
-    /// The name of this rule.
-    ///
-    /// Anonymouse rules are given a generated name.
-    pub name: String,
-    /// The pattern of this rule.
-    pub pattern: Pattern,
-    /// The guard of this rule.
-    pub guard: Option<Vec<Symbol>>,
-    /// The body of this rule.
-    pub body: Vec<Symbol>,
-
-    /// Counter for atoms.
-    pub atom_id: AtomId,
-}
-
-impl Rule {
-    pub fn new(membrane: MembraneId, name: String) -> Self {
-        Rule {
-            membrane,
-            name,
-            pattern: Pattern::new(),
-            guard: None,
-            body: Vec::new(),
-            atom_id: 0,
-        }
-    }
-}
-
 // Data structures for atoms, links, and membranes.
 
 #[derive(Debug)]
 pub struct Atom {
     pub membrane: MembraneId,
+    pub id: AtomId,
     pub name: String,
     pub process: Option<Vec<Symbol>>,
 }
@@ -85,13 +24,14 @@ pub struct Atom {
 #[derive(Debug)]
 pub struct Link {
     pub name: String,
-    pub link1: Option<Symbol>,
-    pub link2: Option<Symbol>,
+    pub link1: Option<(Symbol, usize)>,
+    pub link2: Option<(Symbol, usize)>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Membrane {
     pub membrane: MembraneId,
+    pub id: MembraneId,
     pub name: String,
     pub process: Vec<Symbol>,
     pub rule_set: Vec<RuleId>,

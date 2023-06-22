@@ -1,4 +1,6 @@
-use crate::parser::{data::Symbol, self};
+use colored::Colorize;
+
+use crate::parser::{self, data::Symbol};
 
 pub fn print_indent(indent: usize) {
     for _ in 0..indent {
@@ -11,7 +13,7 @@ pub fn print_result(s: &Symbol, indent: usize) {
         Symbol::Atom(a) => unsafe {
             let atom = parser::ATOMS.get().unwrap().get(a).unwrap();
             print_indent(indent);
-            println!("{:?}", atom);
+            println!("{} id:{} name:{}", "Atom".bold().blue(), atom.id, atom.name);
             if let Some(p) = &atom.process {
                 for s in p {
                     print_result(s, indent + 1);
@@ -25,29 +27,28 @@ pub fn print_result(s: &Symbol, indent: usize) {
         Symbol::Rule(r) => unsafe {
             let rule = parser::RULES.get().unwrap().get(r).unwrap();
             print_indent(indent);
-            println!("{:?}", rule);
+            println!("{} name:{}", "Rule".bold().magenta(), rule.name);
             print_indent(indent + 1);
-            println!("pattern");
+            println!("{}", "pattern".bright_magenta());
             println!("{:?}", rule.pattern);
             if let Some(g) = &rule.guard {
                 print_indent(indent + 1);
                 println!("guard");
-                for s in g {
-                    print_result(s, indent + 2);
-                }
+                println!("{:?}", g);
             }
             print_indent(indent + 1);
             println!("body");
-            for s in &rule.body {
-                print_result(s, indent + 2);
-            }
+            println!("{:?}", rule.body);
         },
         Symbol::Membrane(m) => unsafe {
             let mem = parser::MEMS.get().unwrap().get(m).unwrap();
             print_indent(indent);
-            println!("{:?}", mem);
+            println!("{} id:{} name:{}","Membrane".bold().green(), mem.id, mem.name);
             for s in &mem.process {
                 print_result(s, indent + 1);
+            }
+            for r in &mem.rule_set {
+                print_result(&Symbol::Rule(*r), indent + 1);
             }
         },
     }
