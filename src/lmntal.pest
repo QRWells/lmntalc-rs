@@ -7,7 +7,7 @@ WorldProcessList = { (Rule | DeclarationList) ~ (";" ~ (Rule | DeclarationList))
 
 DeclarationList = { Declaration ~ ("," ~ Declaration)* }
 
-Declaration = { UnitAtom }
+Declaration = { UnitAtom | Context }
 
 Atom = { AtomName ~ ("(" ~ DeclarationList ~ ")")? }
 
@@ -27,10 +27,16 @@ LinkName = @{
     (ASCII_ALPHA_UPPER | "_") ~ (ASCII_ALPHANUMERIC | "_")*
 }
 
+Context = @{ "$" ~ AtomName }
+
+// Rule rules
+
 RuleName = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 Rule     =  { (RuleName ~ ":")? ~ Pattern ~ ("[" ~ Guard ~ "]")? ~ "->" ~ Body }
 Body     =  { DeclarationList? }
 Pattern  =  { DeclarationList }
+
+// Guard rules
 
 GuardAtom  = _{ GuardUint | "(" ~ Guard ~ ")" }
 MulDivExpr =  { GuardAtom ~ ((MUL | DIV | MOD) ~ GuardAtom)* }
@@ -40,8 +46,23 @@ AndExpr    =  { (RelExpr | GuardFuncConstraint) ~ (AND ~ (RelExpr | GuardFuncCon
 OrExpr     =  { AndExpr ~ (OR ~ AndExpr)* }
 Guard      =  { OrExpr }
 
+GuardFunctorList    =  { GuardFunctor ~ ("," ~ GuardFunctor)* }
+GuardFunctor        = @{ ASCII_ALPHA_UPPER ~ (ASCII_ALPHANUMERIC | "_")* }
+GuardUint           = _{ GuardFunctor | Float | Int }
+GuardFuncConstraint =  { GuardFunc ~ "(" ~ GuardFunctorList ~ ")" }
+GuardFunc           = _{ GuardInt | GuardFloat | GuardGround | GuardUniq | GuardUnary }
+GuardUnary          =  { "unary" }
+GuardInt            =  { "int" }
+GuardFloat          =  { "float" }
+GuardGround         =  { "ground" }
+GuardUniq           =  { "uniq" }
+
+// Basic rules
+
 Int   = @{ ASCII_DIGIT+ | "0x" ~ ASCII_HEX_DIGIT+ }
 Float = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* }
+
+// Operators
 
 ADD = { "+" }
 SUB = { "-" }
@@ -56,14 +77,3 @@ EQ  = { "==" }
 NE  = { "!=" }
 AND = { "&&" }
 OR  = { "||" }
-
-GuardFunctorList    =  { GuardFunctor ~ ("," ~ GuardFunctor)* }
-GuardFunctor        = @{ ASCII_ALPHA_UPPER ~ (ASCII_ALPHANUMERIC | "_")* }
-GuardUint           = _{ GuardFunctor | Float | Int }
-GuardFuncConstraint =  { GuardFunc ~ "(" ~ GuardFunctorList ~ ")" }
-GuardFunc           = _{ GuardInt | GuardFloat | GuardGround | GuardUniq | GuardUnary }
-GuardUnary          =  { "unary" }
-GuardInt            =  { "int" }
-GuardFloat          =  { "float" }
-GuardGround         =  { "ground" }
-GuardUniq           =  { "uniq" }
