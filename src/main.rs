@@ -7,7 +7,7 @@ fn main() {
     match liblmntalc::parser::parse_lmntal("
     a(X), b(X), m{
         {t}; 
-        s(T) [int(T)] -> ;
+        s($p) |int($p)| -> ;
     }; 
     xx : a,b -> c, d;
     ") {

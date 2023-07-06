@@ -140,6 +140,9 @@ fn parse_declaration(pair: pest::iterators::Pair<Rule>, ctx: Context) -> Symbol 
             Rule::UnitAtom => {
                 return parse_unit_atom(pair, ctx);
             }
+            Rule::Context =>{
+                panic!("{:?}, Context can only be declared in rule", pair.line_col());
+            }
             _ => {
                 unreachable!("Unexpected rule: {:?}", pair.as_rule());
             }

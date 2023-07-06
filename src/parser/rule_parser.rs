@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use super::*;
 
 pub fn parse_rule(pair: pest::iterators::Pair<ParseRule>, ctx: Context) -> Symbol {
@@ -36,9 +34,10 @@ pub enum GuardOperator {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum Functor {
+pub enum Type {
     Int,
     Float,
+    String,
     Unary,
     Uniq,
     Ground,
@@ -47,10 +46,16 @@ pub enum Functor {
 #[derive(Debug, Clone)]
 pub enum GuardNode {
     Value(Symbol),
-    Functor(Functor, Vec<Symbol>),
+    TypeConstraint(Type, Vec<Symbol>),
     IntValue(i64),
     FloatValue(f64),
     Operation(GuardOperator, Box<GuardNode>, Box<GuardNode>),
+}
+
+#[derive(Debug, Clone)]
+pub struct ProcContext {
+    pub name: String,
+    pub type_: Option<Type>,
 }
 
 #[derive(Debug, Default)]
@@ -79,6 +84,7 @@ pub struct Rule {
     pub(crate) atoms: Vec<Atom>,
     pub(crate) links: HashMap<LinkId, Link>,
     pub(crate) mems: Vec<Membrane>,
+    pub(crate) procs: Vec<ProcContext>,
 }
 
 impl Rule {
@@ -190,24 +196,24 @@ impl Rule {
     }
 
     fn parse_guard_func(&mut self, pair: pest::iterators::Pair<ParseRule>) -> GuardNode {
-        let mut functor: Functor = Functor::Ground;
+        let mut functor: Type = Type::Ground;
         let mut args: Vec<Symbol> = Vec::new();
         for pair in pair.into_inner() {
             match pair.as_rule() {
                 ParseRule::GuardInt => {
-                    functor = Functor::Int;
+                    functor = Type::Int;
                 }
                 ParseRule::GuardFloat => {
-                    functor = Functor::Float;
+                    functor = Type::Float;
                 }
                 ParseRule::GuardUnary => {
-                    functor = Functor::Unary;
+                    functor = Type::Unary;
                 }
                 ParseRule::GuardUniq => {
-                    functor = Functor::Uniq;
+                    functor = Type::Uniq;
                 }
                 ParseRule::GuardGround => {
-                    functor = Functor::Ground;
+                    functor = Type::Ground;
                 }
                 ParseRule::GuardFunctorList => {
                     for pair in pair.into_inner() {
@@ -227,7 +233,7 @@ impl Rule {
             }
         }
 
-        GuardNode::Functor(functor, args)
+        GuardNode::TypeConstraint(functor, args)
     }
 
     fn get_symbol(&mut self, name: &str) -> Symbol {
@@ -269,6 +275,9 @@ impl Rule {
             match pair.as_rule() {
                 ParseRule::UnitAtom => {
                     return self.parse_unit_atom(pair, ctx);
+                }
+                ParseRule::Context => {
+                    return Symbol::ProcContext(0);
                 }
                 _ => {
                     unreachable!("Unexpected rule: {:?}", pair.as_rule());

@@ -2,6 +2,7 @@ pub type AtomId = usize;
 pub type LinkId = usize;
 pub type RuleId = usize;
 pub type MembraneId = usize;
+pub type ProcContextId = usize;
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum Symbol {
@@ -9,6 +10,7 @@ pub enum Symbol {
     Link(LinkId),
     Rule(RuleId),
     Membrane(MembraneId),
+    ProcContext(ProcContextId),
 }
 
 // Data structures for atoms, links, and membranes.

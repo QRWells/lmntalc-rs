@@ -43,7 +43,12 @@ pub fn print_result(s: &Symbol, indent: usize) {
         Symbol::Membrane(m) => unsafe {
             let mem = parser::MEMS.get().unwrap().get(m).unwrap();
             print_indent(indent);
-            println!("{} id:{} name:{}","Membrane".bold().green(), mem.id, mem.name);
+            println!(
+                "{} id:{} name:{}",
+                "Membrane".bold().green(),
+                mem.id,
+                mem.name
+            );
             for s in &mem.process {
                 print_result(s, indent + 1);
             }
@@ -51,5 +56,6 @@ pub fn print_result(s: &Symbol, indent: usize) {
                 print_result(&Symbol::Rule(*r), indent + 1);
             }
         },
+        Symbol::ProcContext(_) => {}
     }
 }

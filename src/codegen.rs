@@ -60,6 +60,7 @@ impl ILGenerator {
             Symbol::Link(id) => self.gen_link(id, 0),
             Symbol::Rule(_) => {}
             Symbol::Membrane(id) => self.gen_membrane(id),
+            Symbol::ProcContext(_) => {}
         }
     }
 
