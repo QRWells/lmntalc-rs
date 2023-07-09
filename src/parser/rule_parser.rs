@@ -115,6 +115,10 @@ impl Rule {
                 }
             }
         }
+        if self.name == "" {
+            // generate a random name
+            self.name = format!("__rule_{}", self.line_col.0);
+        }
     }
 
     fn parse_root(&mut self, pair: pest::iterators::Pair<ParseRule>, ctx: Context) -> Membrane {
@@ -237,9 +241,18 @@ impl Rule {
     }
 
     fn get_symbol(&mut self, name: &str) -> Symbol {
-        for (i, link) in self.links.iter() {
-            if link.name == name {
-                return Symbol::Link(*i);
+        if name.starts_with("$") {
+            let name = name[1..].to_string();
+            for (i, proc) in self.procs.iter().enumerate() {
+                if proc.name == name {
+                    return Symbol::ProcContext(i);
+                }
+            }
+        } else {
+            for (i, link) in self.links.iter() {
+                if link.name == name {
+                    return Symbol::Link(*i);
+                }
             }
         }
         panic!("Symbol not found: {}", name);
@@ -277,7 +290,14 @@ impl Rule {
                     return self.parse_unit_atom(pair, ctx);
                 }
                 ParseRule::Context => {
-                    return Symbol::ProcContext(0);
+                    // extract name
+                    let name = pair.as_str().to_string()[1..].to_string();
+                    let context = ProcContext {
+                        name,
+                        type_: None,
+                    };
+                    self.procs.push(context);
+                    return Symbol::ProcContext(self.procs.len() - 1);
                 }
                 _ => {
                     unreachable!("Unexpected rule: {:?}", pair.as_rule());

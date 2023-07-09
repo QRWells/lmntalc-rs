@@ -58,9 +58,8 @@ impl ILGenerator {
         match symbol {
             Symbol::Atom(id) => self.gen_atom(id),
             Symbol::Link(id) => self.gen_link(id, 0),
-            Symbol::Rule(_) => {}
             Symbol::Membrane(id) => self.gen_membrane(id),
-            Symbol::ProcContext(_) => {}
+            _ => {}
         }
     }
 

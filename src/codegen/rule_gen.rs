@@ -1,5 +1,7 @@
+use clap::Id;
+
 use crate::parser::{
-    data::{self, Symbol},
+    data::{self, AtomId, LinkId, MembraneId, ProcContextId, Symbol},
     rule_parser, RULES,
 };
 
@@ -97,6 +99,45 @@ impl ILGenerator {
                 _ => unreachable!(),
             }
         }
-        // add new atoms
+
+        let body = &ctx.rule.body;
+
+        for process in &body.process {
+            self.gen_rule_inner(ctx, *process);
+        }
     }
+
+    fn gen_rule_inner(&mut self, ctx: &mut RuleGenContext, symbol: Symbol) {
+        match symbol {
+            Symbol::Atom(id) => self.gen_rule_atom(ctx, id),
+            Symbol::Link(id) => self.gen_rule_link(ctx, id),
+            Symbol::Membrane(id) => self.gen_rule_membrane(ctx, id),
+            Symbol::ProcContext(id) => self.gen_rule_proc_context(ctx, id),
+            _ => {}
+        }
+    }
+
+    fn gen_rule_atom(&mut self, ctx: &mut RuleGenContext, id: AtomId) {
+        let atom = ctx.rule.atoms.get(id).unwrap();
+        let functors = if let Some(p) = &atom.process {
+            p.len()
+        } else {
+            0
+        };
+        let name = format!("'{}'_{}", atom.name, functors);
+        self.emit(IL::NewAtom(id, atom.membrane, name));
+        if let Some(p) = &atom.process {
+            for process in p {
+                if !self.queue.contains(process) {
+                    self.queue.push(*process);
+                }
+            }
+        }
+    }
+
+    fn gen_rule_link(&mut self, ctx: &mut RuleGenContext, id: LinkId) {}
+
+    fn gen_rule_membrane(&mut self, ctx: &mut RuleGenContext, id: MembraneId) {}
+
+    fn gen_rule_proc_context(&mut self, ctx: &mut RuleGenContext, id: ProcContextId) {}
 }
