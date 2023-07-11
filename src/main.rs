@@ -1,16 +1,17 @@
 use liblmntalc::codegen;
-use liblmntalc::util::print_result;
 
 mod options;
 
 fn main() {
-    match liblmntalc::parser::parse_lmntal("
-    a(X), b(X), m{
+    match liblmntalc::parser::parse_lmntal(
+        r"
+    a(X,c), b(X), m{
         {t}; 
-        s($p) |int($p)| -> ;
+        s($p) when int($p); with T := 2; then ;
     }; 
-    xx : a,b -> c, d;
-    ") {
+    xx : a,b,e{f} then c, d;
+    ",
+    ) {
         Ok(s) => {
             // print_result(&s, 0);
             let mut gen = codegen::ILGenerator::default();

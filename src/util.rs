@@ -14,10 +14,9 @@ pub fn print_result(s: &Symbol, indent: usize) {
             let atom = parser::ATOMS.get().unwrap().get(a).unwrap();
             print_indent(indent);
             println!("{} id:{} name:{}", "Atom".bold().blue(), atom.id, atom.name);
-            if let Some(p) = &atom.process {
-                for s in p {
-                    print_result(s, indent + 1);
-                }
+
+            for s in &atom.links {
+                print_result(s, indent + 1);
             }
         },
         Symbol::Link(l) => unsafe {

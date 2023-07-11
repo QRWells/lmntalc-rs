@@ -1,11 +1,14 @@
 use std::{collections::HashMap, fmt::Display};
 
+use colored::Colorize;
+
 use crate::parser::{
-    data::{MembraneId, Symbol},
-    ATOMS, LINKS, MEMS,
+    data::{Membrane, MembraneId, Symbol},
+    rule_parser::Rule,
+    MEMS, RULES,
 };
 
-use self::il::{Label, IL};
+use self::il::IL;
 
 pub mod il;
 mod rule_gen;
@@ -16,30 +19,61 @@ pub enum Target {
 }
 
 #[derive(Debug, Default)]
+pub struct RuleIL {
+    pub name: String,
+    pub pattern: Vec<IL>,
+    pub body: Vec<IL>,
+    pub guard: Vec<IL>,
+}
+
+impl Display for RuleIL {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "{} {}", "Rule".magenta(), self.name)?;
+        writeln!(f, "{}", "Pattern".green())?;
+        for il in &self.pattern {
+            writeln!(f, "{}", il)?;
+        }
+        writeln!(f, "{}", "Guard".yellow())?;
+        for il in &self.guard {
+            writeln!(f, "{}", il)?;
+        }
+        writeln!(f, "{}", "Body".bright_green())?;
+        for il in &self.body {
+            writeln!(f, "{}", il)?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Default)]
 pub struct ILGenerator {
-    il: Vec<IL>,
-    rule_sets: HashMap<usize, Vec<IL>>,
-    queue: Vec<Symbol>,
+    init_rule: Vec<IL>,
+    /// Membrane ID -> Rule Set
+    /// Rule set contains rules in the membrane.
+    rule_sets: HashMap<usize, Vec<RuleIL>>,
 }
 
 impl ILGenerator {
-    pub fn emit(&mut self, il: IL) {
-        self.il.push(il);
-    }
-
-    pub fn write_to(&self, path: &str, target: Target) {
-        todo!("ILGenerator::write_to")
-    }
-
-    fn binary_header(&self) -> Vec<u8> {
-        todo!("ILGenerator::binary_header")
+    fn emit_rule(&mut self, mem_id: MembraneId, rule: RuleIL) {
+        self.rule_sets
+            .entry(mem_id)
+            .or_insert_with(Vec::new)
+            .push(rule);
     }
 }
 
 impl Display for ILGenerator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for il in &self.il {
+        writeln!(f, "{}", "Init".magenta())?;
+        for il in &self.init_rule {
             writeln!(f, "{}", il)?;
+        }
+        writeln!(f)?;
+        for (mem_id, rule_set) in &self.rule_sets {
+            writeln!(f, "{} {}", "RuleSet".blue(), mem_id)?;
+            for rule in rule_set {
+                writeln!(f, "{}", rule)?;
+            }
         }
         Ok(())
     }
@@ -49,98 +83,90 @@ impl ILGenerator {
     /// Entry point of code generation.
     pub fn gen(&mut self, symbol: Symbol) {
         match symbol {
-            Symbol::Membrane(id) => self.gen_init(id),
+            Symbol::Membrane(id) => {
+                let mem = unsafe { MEMS.get().unwrap().get(&id).unwrap() };
+                self.gen_init_mem(mem);
+            }
             _ => unreachable!(),
         }
     }
 
-    fn gen_inner(&mut self, symbol: Symbol) {
+    fn gen_init_mem(&mut self, mem: &Membrane) {
+        for process in &mem.process {
+            let mut unit = self.gen_unit(*process);
+            self.init_rule.append(&mut unit);
+        }
+
+        // while let Some(process) = self.queue.pop() {
+        //     self.gen_unit(process);
+        // }
+
+        for rule_id in &mem.rule_set {
+            let rule = unsafe { RULES.get().unwrap().get(rule_id).unwrap() };
+            let rule_il = gen_rule(rule);
+            self.emit_rule(mem.id, rule_il);
+        }
+    }
+
+    fn gen_unit(&mut self, symbol: Symbol) -> Vec<IL> {
         match symbol {
-            Symbol::Atom(id) => self.gen_atom(id),
-            Symbol::Link(id) => self.gen_link(id, 0),
-            Symbol::Membrane(id) => self.gen_membrane(id),
-            _ => {}
+            Symbol::Atom(id) => {
+                let atom = unsafe { crate::parser::ATOMS.get().unwrap().get(&id).unwrap() };
+                ILGenerator::gen_atom(atom)
+            }
+            Symbol::Membrane(id) => {
+                let mem = unsafe { crate::parser::MEMS.get().unwrap().get(&id).unwrap() };
+                self.gen_mem(mem)
+            }
+            _ => {
+                unreachable!()
+            }
         }
     }
 
-    fn gen_init(&mut self, id: MembraneId) {
-        let mem = unsafe { MEMS.get().unwrap().get(&id).unwrap() };
-        self.emit(IL::Spec(1, unsafe { super::parser::ENTITY_ID }));
-        self.emit(IL::Commit("_init".to_owned(), 0));
+    fn gen_atom(atom: &crate::parser::data::Atom) -> Vec<IL> {
+        let mut il = vec![IL::NewAtom(
+            atom.id,
+            atom.membrane,
+            atom.name.clone(),
+            atom.links.len(),
+        )];
 
-        for process in &mem.process {
-            self.gen_inner(*process);
-        }
-
-        while let Some(process) = self.queue.pop() {
-            self.gen_inner(process);
-        }
-
-        self.emit(IL::Proceed());
-
-        self.emit(IL::Label(Label::RuleSet(0)));
-        for rule in &mem.rule_set {
-            self.gen_rule(*rule);
-        }
-    }
-
-    fn gen_membrane(&mut self, id: usize) {
-        let mem = unsafe { MEMS.get().unwrap().get(&id).unwrap() };
-        self.emit(IL::NewMem(id, 0));
-        if !mem.name.is_empty() {
-            self.emit(IL::SetMemName(id, mem.name.clone()));
-        }
-        for process in &mem.process {
-            self.gen_inner(*process);
-        }
-
-        if mem.rule_set.is_empty() {
-            return;
-        }
-        self.emit(IL::Label(Label::RuleSet(id)));
-        for rule in &mem.rule_set {
-            self.gen_rule(*rule);
-        }
-    }
-
-    fn gen_atom(&mut self, id: usize) {
-        let atom = unsafe { ATOMS.get().unwrap().get(&id).unwrap() };
-        let functors = if let Some(p) = &atom.process {
-            p.len()
-        } else {
-            0
-        };
-        let name = format!("'{}'_{}", atom.name, functors);
-        self.emit(IL::NewAtom(id, atom.membrane, name));
-        if let Some(p) = &atom.process {
-            for process in p {
-                if !self.queue.contains(process) {
-                    self.queue.push(*process);
+        for link in &atom.links {
+            if let Symbol::Link(id) = link {
+                let link = unsafe { crate::parser::LINKS.get().unwrap().get(id).unwrap() };
+                if let Some(link2) = link.link2 {
+                    if Into::<usize>::into(link2.0) == atom.id {
+                        il.push(IL::new_link(link, 0));
+                    }
                 }
             }
         }
+
+        il
     }
 
-    fn gen_link(&mut self, id: usize, mem: MembraneId) {
-        let link = unsafe { LINKS.get().unwrap().get(&id).unwrap() };
-        let (id1, pos1) = if let Some(link1) = &link.link1 {
-            match link1 {
-                (Symbol::Atom(id), pos) => (*id, *pos),
-                (Symbol::Membrane(_), _) => todo!(),
-                _ => unreachable!(),
-            }
-        } else {
-            panic!("There is a free link: {:?}", link);
-        };
-        let (id2, pos2) = if let Some(link2) = &link.link2 {
-            match link2 {
-                (Symbol::Atom(id), pos) => (*id, *pos),
-                (Symbol::Membrane(_), _) => todo!(),
-                _ => unreachable!(),
-            }
-        } else {
-            panic!("There is a free link: {:?}", link);
-        };
-        self.emit(IL::NewLink(id1, pos1, id2, pos2, mem));
+    fn gen_mem(&mut self, mem: &Membrane) -> Vec<IL> {
+        let mut il = Vec::new();
+        il.push(IL::NewMem(mem.id, mem.membrane));
+        if !mem.name.is_empty() {
+            il.push(IL::SetMemName(mem.id, mem.name.clone()));
+        }
+        for process in &mem.process {
+            let mut unit = self.gen_unit(*process);
+            il.append(&mut unit);
+        }
+        for rule_id in &mem.rule_set {
+            let rule = unsafe { RULES.get().unwrap().get(rule_id).unwrap() };
+            let rule_il = gen_rule(rule);
+            self.emit_rule(mem.id, rule_il);
+        }
+        il
     }
+}
+
+fn gen_rule(rule: &Rule) -> RuleIL {
+    let mut rule_gen = rule_gen::RuleGenerator::new(rule);
+    rule_gen.gen();
+    rule_gen.il
 }

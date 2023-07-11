@@ -17,7 +17,7 @@ pub trait Optimizer: Debug {
     ///
     /// For example, if this optimizer is executed in the first pass, return `1`.
     /// If this optimizer is executed in first two passes, return `2`.
-    /// 
+    ///
     /// Here, if this optimizer is executed in every possible pass, return `0`.
     fn pass(&self) -> u8;
 

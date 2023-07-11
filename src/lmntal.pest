@@ -6,23 +6,17 @@ Program = { SOI ~ WorldProcessList ~ EOI }
 WorldProcessList = { (Rule | DeclarationList) ~ (";" ~ (Rule | DeclarationList))* ~ ";"? }
 
 DeclarationList = { Declaration ~ ("," ~ Declaration)* }
-
-Declaration = { UnitAtom | Context }
-
-Atom = { AtomName ~ ("(" ~ DeclarationList ~ ")")? }
-
-Link = { LinkName }
-
-UnitAtom = { Membrane | Atom | Link }
-
-Membrane = { AtomName? ~ "{" ~ WorldProcessList ~ "}" }
+Declaration     = { UnitAtom | Context }
+UnitAtom        = { Membrane | Atom | Link }
+Atom            = { AtomName ~ ("(" ~ DeclarationList ~ ")")? }
+Link            = { LinkName }
+Membrane        = { AtomName? ~ "{" ~ WorldProcessList ~ "}" }
 
 AtomName = @{
     (ASCII_ALPHA_LOWER ~ (ASCII_ALPHANUMERIC | "_")*)
   | Float
   | Int
 }
-
 LinkName = @{
     (ASCII_ALPHA_UPPER | "_") ~ (ASCII_ALPHANUMERIC | "_")*
 }
@@ -32,13 +26,16 @@ Context = @{ "$" ~ AtomName }
 // Rule rules
 
 RuleName = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
-Rule     =  { (RuleName ~ ":")? ~ Pattern ~ ("|" ~ Guard ~ "|")? ~ "->" ~ Body }
+Rule     =  { (RuleName ~ ":")? ~ Pattern ~ (WHEN ~ Guard ~ ";")? ~ (WITH ~ VarGuard ~ ";")? ~ THEN ~ Body }
 Body     =  { DeclarationList? }
 Pattern  =  { DeclarationList }
+WITH     = @{ "with" ~ WHITESPACE+ }
+WHEN     = @{ "when" ~ WHITESPACE+ }
+THEN     = @{ "then" ~ WHITESPACE+ }
 
 // Guard rules
 
-GuardAtom  = _{ GuardUint | "(" ~ Guard ~ ")" }
+GuardAtom  = _{ GuardUnit | "(" ~ Guard ~ ")" }
 MulDivExpr =  { GuardAtom ~ ((MUL | DIV | MOD) ~ GuardAtom)* }
 AddSubExpr =  { MulDivExpr ~ ((ADD | SUB) ~ MulDivExpr)* }
 RelExpr    =  { AddSubExpr ~ ((LE | LT | GE | GT | EQ | NE) ~ AddSubExpr)? }
@@ -46,9 +43,13 @@ AndExpr    =  { (RelExpr | GuardFuncConstraint) ~ (AND ~ (RelExpr | GuardFuncCon
 OrExpr     =  { AndExpr ~ (OR ~ AndExpr)* }
 Guard      =  { OrExpr }
 
+TempVar    = @{ ASCII_ALPHA_UPPER ~ (ASCII_ALPHANUMERIC | "_")* }
+AssignExpr =  { TempVar ~ ":=" ~ AddSubExpr }
+VarGuard   =  { AssignExpr ~ ("," ~ AssignExpr)* }
+
 GuardFunctorList    =  { GuardFunctor ~ ("," ~ GuardFunctor)* }
 GuardFunctor        = @{ Context | ASCII_ALPHA_UPPER ~ (ASCII_ALPHANUMERIC | "_")* }
-GuardUint           = _{ GuardFunctor | Float | Int }
+GuardUnit           = _{ GuardFunctor | Float | Int }
 GuardFuncConstraint =  { GuardFunc ~ "(" ~ GuardFunctorList ~ ")" }
 GuardFunc           = _{ GuardInt | GuardFloat | GuardString | GuardGround | GuardUniq | GuardUnary }
 GuardUnary          =  { "unary" }

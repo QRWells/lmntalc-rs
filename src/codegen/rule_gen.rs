@@ -1,70 +1,60 @@
-use clap::Id;
-
 use crate::parser::{
-    data::{self, AtomId, LinkId, MembraneId, ProcContextId, Symbol},
-    rule_parser, RULES,
+    data::{self, Membrane, Symbol},
+    rule_parser,
 };
 
-use super::{
-    il::{Label, IL},
-    ILGenerator,
-};
+use super::{il::IL, RuleIL};
 
-struct RuleGenContext<'a> {
+#[derive(Debug)]
+pub(crate) struct RuleGenerator<'a> {
     rule: &'a rule_parser::Rule,
-    id: usize,
     register: usize,
     remove_stack: Vec<(Symbol, usize)>,
+    pub(crate) il: RuleIL,
 }
 
-impl ILGenerator {
-    pub(crate) fn gen_rule(&mut self, id: usize) {
-        self.emit(IL::Label(Label::Rule(id)));
-
-        let rule = unsafe { RULES.get().unwrap().get(&id).unwrap() };
-
-        self.emit(IL::Spec(1, rule.entity_id));
-
-        let mut ctx = RuleGenContext {
+impl<'a> RuleGenerator<'a> {
+    pub fn new(rule: &'a rule_parser::Rule) -> Self {
+        Self {
             rule,
-            id,
             register: 0,
             remove_stack: Vec::new(),
-        };
-
-        self.gen_pattern(&mut ctx);
-        self.gen_body(&mut ctx);
+            il: RuleIL::default(),
+        }
     }
 
-    fn gen_pattern(&mut self, ctx: &mut RuleGenContext) {
-        let mem = &ctx.rule.pattern;
+    pub(crate) fn gen(&mut self) {
+        self.il.name = self.rule.name.clone();
+        self.gen_pattern();
+        self.gen_guard();
+        self.gen_body();
+    }
+
+    fn gen_pattern(&mut self) {
+        let mem = &self.rule.pattern;
         let mut atom_counter = 0;
         let mut mem_counter = 0;
         for p in &mem.process {
-            let reg = ctx.register;
-            let rule = ctx.rule;
+            let reg = self.register;
+            let rule = self.rule;
             match p {
                 data::Symbol::Atom(_) => {
                     let atom = rule.atoms.get(atom_counter).unwrap();
                     atom_counter += 1;
-                    self.emit(IL::FindAtom(
+                    self.il.pattern.push(IL::FindAtom(
                         reg,
                         atom.membrane,
                         atom.name.clone(),
-                        if let Some(p) = &atom.process {
-                            p.len()
-                        } else {
-                            0
-                        },
+                        atom.links.len(),
                     ));
-                    ctx.remove_stack.push((Symbol::Atom(reg), atom.membrane));
-                    ctx.register += 1;
+                    self.remove_stack.push((Symbol::Atom(reg), atom.membrane));
+                    self.register += 1;
                     // todo: gen process
                 }
                 data::Symbol::Membrane(_) => {
                     let mem = rule.mems.get(mem_counter).unwrap();
                     mem_counter += 1;
-                    self.emit(IL::AnyMem(
+                    self.il.pattern.push(IL::AnyMem(
                         reg,
                         rule.membrane,
                         0,
@@ -74,70 +64,105 @@ impl ILGenerator {
                             None
                         },
                     ));
-                    ctx.remove_stack.push((Symbol::Membrane(reg), mem.membrane));
-                    ctx.register += 1;
-                    // todo: gen process
+                    self.remove_stack
+                        .push((Symbol::Membrane(reg), mem.membrane));
+                    self.register += 1;
+
+                    self.il.pattern.push(IL::NAtoms(reg, mem.process.len()))
                 }
                 _ => {
                     unreachable!("Unexpected symbol: {:?}", p);
                 }
             }
         }
-        self.emit(IL::Commit(ctx.rule.name.clone(), ctx.rule.line_col.0));
     }
 
-    fn gen_body(&mut self, ctx: &mut RuleGenContext) {
-        // remove found atoms
-        for (symbol, mem) in ctx.remove_stack.drain(..) {
+    fn gen_guard(&mut self) {}
+
+    fn gen_body(&mut self) {
+        for (symbol, mem) in self.remove_stack.iter().rev() {
             match symbol {
                 Symbol::Atom(id) => {
-                    self.emit(IL::RemoveAtom(id, mem));
+                    self.il.body.push(IL::RemoveAtom(*id, *mem));
                 }
                 Symbol::Membrane(id) => {
-                    self.emit(IL::RemoveMem(id, mem));
+                    self.il.body.push(IL::RemoveMem(*id, *mem));
                 }
-                _ => unreachable!(),
+                _ => {
+                    unreachable!()
+                }
             }
         }
-
-        let body = &ctx.rule.body;
-
-        for process in &body.process {
-            self.gen_rule_inner(ctx, *process);
+        let mut il = Vec::new();
+        let mem = &self.rule.body;
+        for process in &mem.process {
+            let mut unit = self.gen_unit(*process);
+            il.append(&mut unit);
         }
+        self.il.body.append(&mut il);
     }
 
-    fn gen_rule_inner(&mut self, ctx: &mut RuleGenContext, symbol: Symbol) {
+    fn gen_unit(&mut self, symbol: Symbol) -> Vec<IL> {
         match symbol {
-            Symbol::Atom(id) => self.gen_rule_atom(ctx, id),
-            Symbol::Link(id) => self.gen_rule_link(ctx, id),
-            Symbol::Membrane(id) => self.gen_rule_membrane(ctx, id),
-            Symbol::ProcContext(id) => self.gen_rule_proc_context(ctx, id),
-            _ => {}
-        }
-    }
-
-    fn gen_rule_atom(&mut self, ctx: &mut RuleGenContext, id: AtomId) {
-        let atom = ctx.rule.atoms.get(id).unwrap();
-        let functors = if let Some(p) = &atom.process {
-            p.len()
-        } else {
-            0
-        };
-        let name = format!("'{}'_{}", atom.name, functors);
-        self.emit(IL::NewAtom(id, atom.membrane, name));
-        if let Some(p) = &atom.process {
-            for process in p {
-                if !self.queue.contains(process) {
-                    self.queue.push(*process);
+            Symbol::Atom(id) => {
+                for atom in &self.rule.atoms {
+                    if atom.id == id {
+                        return self.gen_atom(atom);
+                    }
                 }
+                unreachable!()
+            }
+            Symbol::Membrane(id) => {
+                for mem in &self.rule.mems {
+                    if mem.id == id {
+                        return self.gen_mem(mem);
+                    }
+                }
+                unreachable!()
+            }
+            _ => {
+                unreachable!()
             }
         }
     }
 
-    fn gen_rule_link(&mut self, ctx: &mut RuleGenContext, id: LinkId) {}
+    fn gen_atom(&mut self, atom: &crate::parser::data::Atom) -> Vec<IL> {
+        let mut il = vec![IL::NewAtom(
+            atom.id,
+            atom.membrane,
+            atom.name.clone(),
+            atom.links.len(),
+        )];
 
-    fn gen_rule_membrane(&mut self, ctx: &mut RuleGenContext, id: MembraneId) {}
+        for link in &atom.links {
+            if let Symbol::Link(id) = link {
+                let link = self.rule.links.get(id).unwrap();
+                if let Some(link2) = link.link2 {
+                    if Into::<usize>::into(link2.0) == atom.id {
+                        il.push(IL::new_link(link, 0));
+                    }
+                }
+            }
+        }
 
-    fn gen_rule_proc_context(&mut self, ctx: &mut RuleGenContext, id: ProcContextId) {}
+        il
+    }
+
+    fn gen_mem(&mut self, mem: &Membrane) -> Vec<IL> {
+        let mut il = Vec::new();
+        il.push(IL::NewMem(mem.id, mem.membrane));
+        if !mem.name.is_empty() {
+            il.push(IL::SetMemName(mem.id, mem.name.clone()));
+        }
+        for process in &mem.process {
+            let mut unit = self.gen_unit(*process);
+            il.append(&mut unit);
+        }
+        // for rule_id in &mem.rule_set {
+        //     let rule = unsafe { RULES.get().unwrap().get(rule_id).unwrap() };
+        //     let rule_il = gen_rule(rule);
+        //     self.emit_rule(mem.id, rule_il);
+        // }
+        il
+    }
 }

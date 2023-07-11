@@ -77,6 +77,8 @@ pub struct Rule {
     /// The guard of this rule.
     pub guard: Option<GuardNode>,
 
+    pub assign: usize,
+
     /// The body of this rule.
     pub body: Membrane,
 
@@ -110,12 +112,18 @@ impl Rule {
                 ParseRule::Guard => {
                     self.guard = Some(self.parse_guard(pair));
                 }
+                ParseRule::VarGuard => {
+                    todo!("VarGuard")
+                }
+                ParseRule::WHEN | ParseRule::WITH | ParseRule::THEN => {
+                    // ignore
+                }
                 _ => {
                     unreachable!("Unexpected rule: {:?}", pair.as_rule())
                 }
             }
         }
-        if self.name == "" {
+        if self.name.is_empty() {
             // generate a random name
             self.name = format!("__rule_{}", self.line_col.0);
         }
@@ -241,8 +249,7 @@ impl Rule {
     }
 
     fn get_symbol(&mut self, name: &str) -> Symbol {
-        if name.starts_with("$") {
-            let name = name[1..].to_string();
+        if let Some(name) = name.strip_prefix('$') {
             for (i, proc) in self.procs.iter().enumerate() {
                 if proc.name == name {
                     return Symbol::ProcContext(i);
@@ -259,6 +266,38 @@ impl Rule {
     }
 
     // Parsing pattern and body
+
+    fn parse_world_process_list(
+        &mut self,
+        pair: pest::iterators::Pair<ParseRule>,
+        ctx: Context,
+    ) -> Vec<Symbol> {
+        let mut list: Vec<Symbol> = Vec::new();
+        for pair in pair.into_inner() {
+            match pair.as_rule() {
+                ParseRule::Rule => {
+                    todo!()
+                }
+                ParseRule::DeclarationList => {
+                    list.append(&mut self.parse_declaration_list(pair, ctx));
+
+                    for atom in self.atoms.iter() {
+                        if atom.membrane == ctx.membrane && !list.contains(&Symbol::Atom(atom.id)) {
+                            list.push(Symbol::Atom(atom.id));
+                        }
+                    }
+                }
+                _ => {
+                    unreachable!("Unexpected rule: {:?}", pair.as_rule());
+                }
+            }
+        }
+
+        // sort the list
+        list.sort_by(|a, b| a.compare(b));
+
+        list
+    }
 
     fn parse_declaration_list(
         &mut self,
@@ -292,10 +331,7 @@ impl Rule {
                 ParseRule::Context => {
                     // extract name
                     let name = pair.as_str().to_string()[1..].to_string();
-                    let context = ProcContext {
-                        name,
-                        type_: None,
-                    };
+                    let context = ProcContext { name, type_: None };
                     self.procs.push(context);
                     return Symbol::ProcContext(self.procs.len() - 1);
                 }
@@ -334,6 +370,7 @@ impl Rule {
 
     fn parse_link(&mut self, pair: pest::iterators::Pair<ParseRule>, ctx: Context) -> Symbol {
         let mut name = "".to_string();
+        let pos = pair.as_span().start_pos().pos();
         for pair in pair.into_inner() {
             match pair.as_rule() {
                 ParseRule::LinkName => {
@@ -357,6 +394,8 @@ impl Rule {
             name,
             link1: Some((ctx.from, ctx.pos.unwrap())),
             link2: None,
+            pos1: Some(pos),
+            pos2: None,
         };
         self.links.insert(id, link);
         Symbol::Link(id)
@@ -373,10 +412,11 @@ impl Rule {
                     name = pair.as_str().to_string();
                 }
                 ParseRule::WorldProcessList => {
-                    process.append(&mut parse_world_process_list(
+                    process.append(&mut self.parse_world_process_list(
                         pair,
                         Context {
                             from: Symbol::Membrane(id),
+                            membrane: id,
                             ..ctx
                         },
                     ));
@@ -432,14 +472,14 @@ impl Rule {
                 membrane: ctx.membrane,
                 id,
                 name,
-                process: None,
+                links: vec![],
             }
         } else {
             Atom {
                 membrane: ctx.membrane,
                 id,
                 name,
-                process: Some(process),
+                links: process,
             }
         };
         self.atoms.push(atom);

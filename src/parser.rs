@@ -2,7 +2,7 @@ pub mod data;
 pub mod rule_parser;
 
 use once_cell::sync::OnceCell;
-use pest::Parser;
+use pest::{Parser, Position};
 use std::collections::HashMap;
 
 use self::{data::*, rule_parser::parse_rule};
@@ -63,6 +63,20 @@ pub fn parse_lmntal(file: &str) -> Result<Symbol, Box<pest::error::Error<Rule>>>
         }
     }
 
+    unsafe {
+        let links = LINKS.get_or_init(HashMap::new);
+        for link in links.values() {
+            if link.link2.is_none() {
+                return Err(Box::new(pest::error::Error::new_from_pos(
+                    pest::error::ErrorVariant::CustomError {
+                        message: "Free link is not allowed here.".to_string(),
+                    },
+                    Position::new(file, link.pos1.unwrap()).unwrap(),
+                )));
+            }
+        }
+    }
+
     let mut rule_set = vec![];
     for symbol in init_process.iter() {
         if let Symbol::Rule(id) = symbol {
@@ -96,6 +110,15 @@ fn parse_world_process_list(pair: pest::iterators::Pair<Rule>, ctx: Context) -> 
             }
             Rule::DeclarationList => {
                 list.append(&mut parse_declaration_list(pair, ctx));
+
+                unsafe {
+                    let atoms = ATOMS.get().unwrap();
+                    for (id, atom) in atoms.iter() {
+                        if atom.membrane == ctx.membrane && !list.contains(&Symbol::Atom(*id)) {
+                            list.push(Symbol::Atom(*id));
+                        }
+                    }
+                }
             }
             Rule::EOI => {}
             _ => {
@@ -103,6 +126,10 @@ fn parse_world_process_list(pair: pest::iterators::Pair<Rule>, ctx: Context) -> 
             }
         }
     }
+
+    // sort the list
+    list.sort_by(|a, b| a.compare(b));
+
     list
 }
 
@@ -140,8 +167,11 @@ fn parse_declaration(pair: pest::iterators::Pair<Rule>, ctx: Context) -> Symbol 
             Rule::UnitAtom => {
                 return parse_unit_atom(pair, ctx);
             }
-            Rule::Context =>{
-                panic!("{:?}, Context can only be declared in rule", pair.line_col());
+            Rule::Context => {
+                panic!(
+                    "{:?}, Context can only be declared in rule",
+                    pair.line_col()
+                );
             }
             _ => {
                 unreachable!("Unexpected rule: {:?}", pair.as_rule());
@@ -173,6 +203,7 @@ fn parse_unit_atom(pair: pest::iterators::Pair<Rule>, ctx: Context) -> Symbol {
 
 fn parse_link(pair: pest::iterators::Pair<Rule>, ctx: Context) -> Symbol {
     let mut name = "".to_string();
+    let pos = pair.as_span().start_pos().pos();
     for pair in pair.into_inner() {
         match pair.as_rule() {
             Rule::LinkName => {
@@ -190,6 +221,7 @@ fn parse_link(pair: pest::iterators::Pair<Rule>, ctx: Context) -> Symbol {
         for (k, v) in LINKS.get_mut().unwrap().iter_mut() {
             if v.name == name {
                 v.link2 = Some((ctx.from, ctx.pos.unwrap()));
+                v.pos2 = Some(pos);
                 return Symbol::Link(*k);
             }
         }
@@ -199,6 +231,8 @@ fn parse_link(pair: pest::iterators::Pair<Rule>, ctx: Context) -> Symbol {
             name,
             link1: Some((ctx.from, ctx.pos.unwrap())),
             link2: None,
+            pos1: Some(pos),
+            pos2: None,
         };
         LINKS.get_mut().unwrap().insert(id, link);
         Symbol::Link(id)
@@ -257,6 +291,7 @@ fn parse_atom(pair: pest::iterators::Pair<Rule>, ctx: Context) -> Symbol {
     let mut name: String = "".to_string();
     let mut process: Vec<Symbol> = Vec::new();
     let id = unsafe { ENTITY_ID };
+    unsafe { ENTITY_ID += 1 };
     let mut pos = 0;
     for pair in pair.into_inner() {
         match pair.as_rule() {
@@ -282,25 +317,39 @@ fn parse_atom(pair: pest::iterators::Pair<Rule>, ctx: Context) -> Symbol {
         }
     }
 
-    let atom = if process.is_empty() {
-        Atom {
-            membrane: ctx.membrane,
-            id,
-            name,
-            process: None,
-        }
-    } else {
-        Atom {
-            membrane: ctx.membrane,
-            id,
-            name,
-            process: Some(process),
-        }
+    let mut atom = Atom {
+        membrane: ctx.membrane,
+        id,
+        name,
+        links: process,
     };
+
+    let res = match ctx.from {
+        Symbol::Atom(from_id) => {
+            let link = Link {
+                name: String::new(),
+                link1: Some((Symbol::Atom(from_id), ctx.pos.unwrap())),
+                link2: Some((Symbol::Atom(id), atom.links.len())),
+                pos1: None,
+                pos2: None,
+            };
+            unsafe {
+                let id = LINK_ID;
+                LINK_ID += 1;
+
+                LINKS.get_or_init(HashMap::new);
+                LINKS.get_mut().unwrap().insert(id, link);
+                atom.links = vec![Symbol::Link(id)];
+                Symbol::Link(id)
+            }
+        }
+        _ => Symbol::Atom(id),
+    };
+
     unsafe {
-        ENTITY_ID += 1;
         _ = ATOMS.get_or_init(HashMap::new);
         ATOMS.get_mut().unwrap().insert(id, atom);
     }
-    Symbol::Atom(id)
+
+    res
 }

@@ -1,6 +1,6 @@
 pub mod codegen;
-pub mod parser;
 pub mod optimizer;
+pub mod parser;
 pub mod util;
 
 extern crate pest;
