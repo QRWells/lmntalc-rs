@@ -1,9 +1,63 @@
+use std::fmt::Display;
+
+use colored::Colorize;
+
 use crate::parser::{
-    data::{self, Membrane, Symbol},
-    rule_parser,
+    data::{self, Membrane, MembraneId, Symbol},
+    rule_parser::{self, Case},
 };
 
-use super::{il::IL, RuleIL};
+use super::{il::IL, ILGenerator};
+
+#[derive(Debug, Default)]
+pub struct CaseIL {
+    pub guard: Vec<IL>,
+    pub body: Vec<IL>,
+}
+
+#[derive(Debug, Default)]
+pub struct RuleIL {
+    pub name: String,
+    pub pattern: Vec<IL>,
+    pub removal: Vec<IL>,
+    pub cases: Vec<CaseIL>,
+}
+
+impl Display for RuleIL {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "{} {}", "Rule".magenta(), self.name)?;
+        writeln!(f, "{}", "Pattern".green())?;
+        for il in &self.pattern {
+            writeln!(f, "{}", il)?;
+        }
+        writeln!(f, "{}", "Cases".bright_blue())?;
+        let mut i = 0;
+        for case in &self.cases {
+            writeln!(f, "{} {}", "Case".blue(), i)?;
+            if !case.guard.is_empty() {
+                writeln!(f, "{}", "Guard".yellow())?;
+                for il in &case.guard {
+                    writeln!(f, "{}", il)?;
+                }
+            }
+            writeln!(f, "{}", "Body".bright_green())?;
+            for il in &case.body {
+                writeln!(f, "{}", il)?;
+            }
+            i += 1;
+        }
+        Ok(())
+    }
+}
+
+impl ILGenerator {
+    pub(crate) fn emit_rule(&mut self, mem_id: MembraneId, rule: RuleIL) {
+        self.rule_sets
+            .entry(mem_id)
+            .or_insert_with(Vec::new)
+            .push(rule);
+    }
+}
 
 #[derive(Debug)]
 pub(crate) struct RuleGenerator<'a> {
@@ -27,7 +81,7 @@ impl<'a> RuleGenerator<'a> {
         self.il.name = self.rule.name.clone();
         self.gen_pattern();
         self.gen_guard();
-        self.gen_body();
+        self.gen_cases();
     }
 
     fn gen_pattern(&mut self) {
@@ -79,35 +133,49 @@ impl<'a> RuleGenerator<'a> {
 
     fn gen_guard(&mut self) {}
 
-    fn gen_body(&mut self) {
+    fn gen_cases(&mut self) {
         for (symbol, mem) in self.remove_stack.iter().rev() {
             match symbol {
                 Symbol::Atom(id) => {
-                    self.il.body.push(IL::RemoveAtom(*id, *mem));
+                    self.il.removal.push(IL::RemoveAtom(*id, *mem));
                 }
                 Symbol::Membrane(id) => {
-                    self.il.body.push(IL::RemoveMem(*id, *mem));
+                    self.il.removal.push(IL::RemoveMem(*id, *mem));
                 }
                 _ => {
                     unreachable!()
                 }
             }
         }
-        let mut il = Vec::new();
-        let mem = &self.rule.body;
-        for process in &mem.process {
-            let mut unit = self.gen_unit(*process);
-            il.append(&mut unit);
+        for case in &self.rule.cases {
+            let il = self.gen_case(case);
+            self.il.cases.push(il);
         }
-        self.il.body.append(&mut il);
     }
 
-    fn gen_unit(&mut self, symbol: Symbol) -> Vec<IL> {
+    fn gen_case(&mut self, case: &Case) -> CaseIL {
+        let mut il = CaseIL::default();
+        for process in &case.body.process {
+            let mut unit = self.gen_unit(*process, Some(case.id));
+            il.body.append(&mut unit);
+        }
+        il
+    }
+
+    fn gen_unit(&mut self, symbol: Symbol, case: Option<usize>) -> Vec<IL> {
         match symbol {
             Symbol::Atom(id) => {
-                for atom in &self.rule.atoms {
-                    if atom.id == id {
-                        return self.gen_atom(atom);
+                if let Some(case_id) = case {
+                    for atom in &self.rule.case_atoms[case_id] {
+                        if atom.id == id {
+                            return self.gen_atom(atom, case);
+                        }
+                    }
+                } else {
+                    for atom in &self.rule.atoms {
+                        if atom.id == id {
+                            return self.gen_atom(atom, case);
+                        }
                     }
                 }
                 unreachable!()
@@ -115,7 +183,7 @@ impl<'a> RuleGenerator<'a> {
             Symbol::Membrane(id) => {
                 for mem in &self.rule.mems {
                     if mem.id == id {
-                        return self.gen_mem(mem);
+                        return self.gen_mem(mem, case);
                     }
                 }
                 unreachable!()
@@ -126,7 +194,7 @@ impl<'a> RuleGenerator<'a> {
         }
     }
 
-    fn gen_atom(&mut self, atom: &crate::parser::data::Atom) -> Vec<IL> {
+    fn gen_atom(&mut self, atom: &crate::parser::data::Atom, case: Option<usize>) -> Vec<IL> {
         let mut il = vec![IL::NewAtom(
             atom.id,
             atom.membrane,
@@ -136,7 +204,11 @@ impl<'a> RuleGenerator<'a> {
 
         for link in &atom.links {
             if let Symbol::Link(id) = link {
-                let link = self.rule.links.get(id).unwrap();
+                let link = if let Some(case_id) = case {
+                    self.rule.case_links[case_id].get(id).unwrap()
+                } else {
+                    self.rule.links.get(id).unwrap()
+                };
                 if let Some(link2) = link.link2 {
                     if Into::<usize>::into(link2.0) == atom.id {
                         il.push(IL::new_link(link, 0));
@@ -148,14 +220,14 @@ impl<'a> RuleGenerator<'a> {
         il
     }
 
-    fn gen_mem(&mut self, mem: &Membrane) -> Vec<IL> {
+    fn gen_mem(&mut self, mem: &Membrane, case: Option<usize>) -> Vec<IL> {
         let mut il = Vec::new();
         il.push(IL::NewMem(mem.id, mem.membrane));
         if !mem.name.is_empty() {
             il.push(IL::SetMemName(mem.id, mem.name.clone()));
         }
         for process in &mem.process {
-            let mut unit = self.gen_unit(*process);
+            let mut unit = self.gen_unit(*process, case);
             il.append(&mut unit);
         }
         // for rule_id in &mem.rule_set {

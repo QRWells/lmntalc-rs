@@ -59,6 +59,14 @@ pub struct ProcContext {
 }
 
 #[derive(Debug, Default)]
+pub struct Case {
+    pub id: usize,
+    pub entity_id: usize,
+    pub constraint: Option<GuardNode>,
+    pub body: Membrane,
+}
+
+#[derive(Debug, Default)]
 pub struct Rule {
     /// The line and column number of this rule in the source file.
     pub line_col: (usize, usize),
@@ -74,19 +82,30 @@ pub struct Rule {
     /// The pattern of this rule.
     pub pattern: Membrane,
 
-    /// The guard of this rule.
-    pub guard: Option<GuardNode>,
+    /// The cases of this rule.
+    pub cases: Vec<Case>,
+    pub case_atoms: Vec<Vec<Atom>>,
+    pub case_links: Vec<HashMap<LinkId, Link>>,
+    pub case_mems: Vec<Vec<Membrane>>,
 
-    pub assign: usize,
-
-    /// The body of this rule.
-    pub body: Membrane,
-
+    /// Global entity id for pattern, later used for case parsing.
     pub(crate) entity_id: usize,
     pub(crate) atoms: Vec<Atom>,
     pub(crate) links: HashMap<LinkId, Link>,
     pub(crate) mems: Vec<Membrane>,
     pub(crate) procs: Vec<ProcContext>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuleContext {
+    case: Option<usize>,
+    entity_id: usize,
+    /// From which symbol this symbol is generated.
+    from: Symbol,
+    /// Valid only when `from` is `Some(Symbol::Atom)` or `Some(Symbol::Membrane)`.
+    pos: Option<usize>,
+    /// The membrane in which this symbol is generated.
+    membrane: MembraneId,
 }
 
 impl Rule {
@@ -98,25 +117,36 @@ impl Rule {
     }
 
     pub fn parse(&mut self, pair: pest::iterators::Pair<ParseRule>, ctx: Context) {
+        let mut case_counter = 0;
         for pair in pair.into_inner() {
             match pair.as_rule() {
                 ParseRule::RuleName => {
                     self.name = pair.as_str().to_string();
                 }
                 ParseRule::Pattern => {
+                    let ctx = RuleContext {
+                        case: None,
+                        entity_id: 0,
+                        from: Symbol::Rule(0),
+                        pos: None,
+                        membrane: ctx.membrane,
+                    };
                     self.pattern = self.parse_root(pair, ctx);
                 }
-                ParseRule::Body => {
-                    self.body = self.parse_root(pair, ctx);
-                }
-                ParseRule::Guard => {
-                    self.guard = Some(self.parse_guard(pair));
-                }
-                ParseRule::VarGuard => {
-                    todo!("VarGuard")
-                }
-                ParseRule::WHEN | ParseRule::WITH | ParseRule::THEN => {
-                    // ignore
+                ParseRule::Case => {
+                    let ctx = RuleContext {
+                        case: Some(case_counter),
+                        entity_id: self.entity_id,
+                        from: Symbol::Rule(0),
+                        pos: None,
+                        membrane: ctx.membrane,
+                    };
+                    self.case_atoms.push(Vec::new());
+                    self.case_links.push(HashMap::new());
+                    self.case_mems.push(Vec::new());
+                    let case = self.parse_case(pair, ctx);
+                    self.cases.push(case);
+                    case_counter += 1;
                 }
                 _ => {
                     unreachable!("Unexpected rule: {:?}", pair.as_rule())
@@ -129,7 +159,7 @@ impl Rule {
         }
     }
 
-    fn parse_root(&mut self, pair: pest::iterators::Pair<ParseRule>, ctx: Context) -> Membrane {
+    fn parse_root(&mut self, pair: pest::iterators::Pair<ParseRule>, ctx: RuleContext) -> Membrane {
         let mut process = Vec::new();
         for pair in pair.into_inner() {
             match pair.as_rule() {
@@ -270,7 +300,7 @@ impl Rule {
     fn parse_world_process_list(
         &mut self,
         pair: pest::iterators::Pair<ParseRule>,
-        ctx: Context,
+        ctx: RuleContext,
     ) -> Vec<Symbol> {
         let mut list: Vec<Symbol> = Vec::new();
         for pair in pair.into_inner() {
@@ -281,11 +311,11 @@ impl Rule {
                 ParseRule::DeclarationList => {
                     list.append(&mut self.parse_declaration_list(pair, ctx));
 
-                    for atom in self.atoms.iter() {
-                        if atom.membrane == ctx.membrane && !list.contains(&Symbol::Atom(atom.id)) {
-                            list.push(Symbol::Atom(atom.id));
-                        }
-                    }
+                    // for atom in self.atoms.iter() {
+                    //     if atom.membrane == ctx.membrane && !list.contains(&Symbol::Atom(atom.id)) {
+                    //         list.push(Symbol::Atom(atom.id));
+                    //     }
+                    // }
                 }
                 _ => {
                     unreachable!("Unexpected rule: {:?}", pair.as_rule());
@@ -302,7 +332,7 @@ impl Rule {
     fn parse_declaration_list(
         &mut self,
         pair: pest::iterators::Pair<ParseRule>,
-        ctx: Context,
+        ctx: RuleContext,
     ) -> Vec<Symbol> {
         let mut symbols = Vec::new();
         for pair in pair.into_inner() {
@@ -321,7 +351,7 @@ impl Rule {
     fn parse_declaration(
         &mut self,
         pair: pest::iterators::Pair<ParseRule>,
-        ctx: Context,
+        ctx: RuleContext,
     ) -> Symbol {
         for pair in pair.into_inner() {
             match pair.as_rule() {
@@ -343,7 +373,11 @@ impl Rule {
         unreachable!();
     }
 
-    fn parse_unit_atom(&mut self, pair: pest::iterators::Pair<ParseRule>, ctx: Context) -> Symbol {
+    fn parse_unit_atom(
+        &mut self,
+        pair: pest::iterators::Pair<ParseRule>,
+        ctx: RuleContext,
+    ) -> Symbol {
         for pair in pair.into_inner() {
             match pair.as_rule() {
                 ParseRule::Atom => {
@@ -368,7 +402,7 @@ impl Rule {
         unreachable!();
     }
 
-    fn parse_link(&mut self, pair: pest::iterators::Pair<ParseRule>, ctx: Context) -> Symbol {
+    fn parse_link(&mut self, pair: pest::iterators::Pair<ParseRule>, ctx: RuleContext) -> Symbol {
         let mut name = "".to_string();
         let pos = pair.as_span().start_pos().pos();
         for pair in pair.into_inner() {
@@ -397,15 +431,30 @@ impl Rule {
             pos1: Some(pos),
             pos2: None,
         };
-        self.links.insert(id, link);
+        if ctx.case.is_some() {
+            self.case_links[ctx.case.unwrap()].insert(id, link);
+        } else {
+            self.links.insert(id, link);
+        }
         Symbol::Link(id)
     }
 
-    fn parse_membrane(&mut self, pair: pest::iterators::Pair<ParseRule>, ctx: Context) -> Symbol {
+    fn parse_membrane(
+        &mut self,
+        pair: pest::iterators::Pair<ParseRule>,
+        mut ctx: RuleContext,
+    ) -> Symbol {
         let mut name = "".to_string();
         let mut process: Vec<Symbol> = Vec::new();
-        let id = self.entity_id;
-        self.entity_id += 1;
+        let id = if ctx.case.is_some() {
+            let id = ctx.entity_id;
+            ctx.entity_id += 1;
+            id
+        } else {
+            let id = self.entity_id;
+            self.entity_id += 1;
+            id
+        };
         for pair in pair.into_inner() {
             match pair.as_rule() {
                 ParseRule::AtomName => {
@@ -414,7 +463,7 @@ impl Rule {
                 ParseRule::WorldProcessList => {
                     process.append(&mut self.parse_world_process_list(
                         pair,
-                        Context {
+                        RuleContext {
                             from: Symbol::Membrane(id),
                             membrane: id,
                             ..ctx
@@ -433,15 +482,26 @@ impl Rule {
             process,
             rule_set: vec![],
         };
-        self.mems.push(membrane);
+        if ctx.case.is_some() {
+            self.case_mems[ctx.case.unwrap()].push(membrane);
+        } else {
+            self.mems.push(membrane);
+        }
         Symbol::Membrane(id)
     }
 
-    fn parse_atom(&mut self, pair: pest::iterators::Pair<ParseRule>, ctx: Context) -> Symbol {
+    fn parse_atom(&mut self, pair: pest::iterators::Pair<ParseRule>, mut ctx: RuleContext) -> Symbol {
         let mut name: String = "".to_string();
         let mut process: Vec<Symbol> = Vec::new();
-        let id = self.entity_id;
-        self.entity_id += 1;
+        let id = if ctx.case.is_some() {
+            let id = ctx.entity_id;
+            ctx.entity_id += 1;
+            id
+        } else {
+            let id = self.entity_id;
+            self.entity_id += 1;
+            id
+        };
         let mut pos = 0;
         for pair in pair.into_inner() {
             match pair.as_rule() {
@@ -451,7 +511,7 @@ impl Rule {
                 ParseRule::DeclarationList => {
                     process.append(&mut self.parse_declaration_list(
                         pair,
-                        Context {
+                        RuleContext {
                             from: Symbol::Atom(id),
                             pos: Some({
                                 pos += 1;
@@ -482,8 +542,40 @@ impl Rule {
                 links: process,
             }
         };
-        self.atoms.push(atom);
+        if ctx.case.is_some() {
+            self.case_atoms[ctx.case.unwrap()].push(atom);
+        } else {
+            self.atoms.push(atom);
+        }
         Symbol::Atom(id)
+    }
+}
+
+/// Implementation for Case
+impl Rule {
+    fn parse_case(&mut self, pair: pest::iterators::Pair<ParseRule>, ctx: RuleContext) -> Case {
+        let mut case = Case {
+            id: ctx.case.unwrap(),
+            ..Default::default()
+        };
+        for pair in pair.into_inner() {
+            match pair.as_rule() {
+                ParseRule::Guard => {
+                    case.constraint = Some(self.parse_guard(pair));
+                }
+                ParseRule::VarGuard => {}
+                ParseRule::Body => {
+                    case.body = self.parse_root(pair, ctx);
+                }
+                ParseRule::WHEN | ParseRule::WITH | ParseRule::THEN => {
+                    // ignore
+                }
+                _ => {
+                    unreachable!("Unexpected rule: {:?}", pair.as_rule());
+                }
+            }
+        }
+        case
     }
 }
 

@@ -30,14 +30,14 @@ pub fn print_result(s: &Symbol, indent: usize) {
             print_indent(indent + 1);
             println!("{}", "pattern".bright_magenta());
             println!("{:?}", rule.pattern);
-            if let Some(g) = &rule.guard {
-                print_indent(indent + 1);
-                println!("guard");
-                println!("{:?}", g);
-            }
-            print_indent(indent + 1);
-            println!("body");
-            println!("{:?}", rule.body);
+            // if let Some(g) = &rule.guard {
+            //     print_indent(indent + 1);
+            //     println!("guard");
+            //     println!("{:?}", g);
+            // }
+            // print_indent(indent + 1);
+            // println!("body");
+            // println!("{:?}", rule.body);
         },
         Symbol::Membrane(m) => unsafe {
             let mem = parser::MEMS.get().unwrap().get(m).unwrap();

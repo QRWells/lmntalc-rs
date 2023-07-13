@@ -26,12 +26,13 @@ Context = @{ "$" ~ AtomName }
 // Rule rules
 
 RuleName = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
-Rule     =  { (RuleName ~ ":")? ~ Pattern ~ (WHEN ~ Guard ~ ";")? ~ (WITH ~ VarGuard ~ ";")? ~ THEN ~ Body }
+Rule     =  { (RuleName ~ ":")? ~ Pattern ~ Case ~ (";" ~ Case)* }
+Case     =  { ((WHEN ~ Guard ~ ";") ~ (WITH ~ VarGuard ~ ";")?)* ~ THEN ~ Body }
 Body     =  { DeclarationList? }
 Pattern  =  { DeclarationList }
-WITH     = @{ "with" ~ WHITESPACE+ }
-WHEN     = @{ "when" ~ WHITESPACE+ }
-THEN     = @{ "then" ~ WHITESPACE+ }
+WHEN     = @{ "when" }
+WITH     = @{ "with" }
+THEN     = @{ "then" }
 
 // Guard rules
 

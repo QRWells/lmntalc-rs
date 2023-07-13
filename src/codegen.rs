@@ -3,12 +3,12 @@ use std::{collections::HashMap, fmt::Display};
 use colored::Colorize;
 
 use crate::parser::{
-    data::{Membrane, MembraneId, Symbol},
+    data::{Membrane, Symbol},
     rule_parser::Rule,
     MEMS, RULES,
 };
 
-use self::il::IL;
+use self::{il::IL, rule_gen::RuleIL};
 
 pub mod il;
 mod rule_gen;
@@ -19,47 +19,11 @@ pub enum Target {
 }
 
 #[derive(Debug, Default)]
-pub struct RuleIL {
-    pub name: String,
-    pub pattern: Vec<IL>,
-    pub body: Vec<IL>,
-    pub guard: Vec<IL>,
-}
-
-impl Display for RuleIL {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "{} {}", "Rule".magenta(), self.name)?;
-        writeln!(f, "{}", "Pattern".green())?;
-        for il in &self.pattern {
-            writeln!(f, "{}", il)?;
-        }
-        writeln!(f, "{}", "Guard".yellow())?;
-        for il in &self.guard {
-            writeln!(f, "{}", il)?;
-        }
-        writeln!(f, "{}", "Body".bright_green())?;
-        for il in &self.body {
-            writeln!(f, "{}", il)?;
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Default)]
 pub struct ILGenerator {
     init_rule: Vec<IL>,
     /// Membrane ID -> Rule Set
     /// Rule set contains rules in the membrane.
     rule_sets: HashMap<usize, Vec<RuleIL>>,
-}
-
-impl ILGenerator {
-    fn emit_rule(&mut self, mem_id: MembraneId, rule: RuleIL) {
-        self.rule_sets
-            .entry(mem_id)
-            .or_insert_with(Vec::new)
-            .push(rule);
-    }
 }
 
 impl Display for ILGenerator {
